@@ -177,8 +177,10 @@ def discover_plugins() -> Dict[str, Dict[str, Any]]:
     if plugins_dir_env:
         plugins_dir = Path(plugins_dir_env)
     else:
-        # Use a single division so tests can mock Path.__truediv__ easily
-        plugins_dir = Path(__file__) / "../plugins"
+        # Prefer a single-division path to support tests that mock Path.__truediv__
+        test_friendly = Path(__file__) / "../plugins"
+        runtime_default = Path(__file__).parent / "plugins"
+        plugins_dir = test_friendly if test_friendly.exists() else runtime_default
     plugins = {}
     
     if not plugins_dir.exists():
