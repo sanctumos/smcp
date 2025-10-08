@@ -443,28 +443,38 @@ The server does not currently implement rate limiting. For production use, consi
 
 ## Logging
 
-### Log Format
+### Configuration
 
-Logs are written in structured format:
+Logging is configurable via environment variables. Defaults are chosen for development, with optional production-friendly JSON output and rotation.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
+| `MCP_LOG_JSON` | `false` | Emit logs as JSON lines when `true` |
+| `MCP_LOG_FILE` | `mcp.log` | Log file path |
+| `MCP_LOG_ROTATION` | `size` | Rotation strategy: `size`, `time`, or `none` |
+| `MCP_LOG_MAX_BYTES` | `5242880` | Max bytes before rotate (size rotation) |
+| `MCP_LOG_BACKUP_COUNT` | `5` | Rotated files to keep |
+| `MCP_LOG_ROTATE_WHEN` | `midnight` | Timed rotation unit (e.g. `S`, `M`, `H`, `D`, `midnight`) |
+| `MCP_LOG_ROTATE_INTERVAL` | `1` | Timed rotation interval |
+| `MCP_DISABLE_FILE_LOG` | `false` | Disable file logging when `true` |
+
+### Formats
+
+- When `MCP_LOG_JSON=false` (default), logs use a readable text format:
 
 ```
-2025-07-11 15:21:07,215 - __main__ - INFO - Starting Sanctum Letta MCP Server...
-2025-07-11 15:21:07,354 - __main__ - INFO - Registered tool: botfather.click-button
+2025-07-11 15:21:07 - __main__ - INFO - Starting Sanctum Letta MCP Server...
+2025-07-11 15:21:07 - __main__ - INFO - Registered tool: botfather.click-button
 ```
 
-### Log Levels
+- When `MCP_LOG_JSON=true`, logs are newline-delimited JSON objects with keys like `timestamp`, `level`, `logger`, `message`, `module`, `function`, `line`.
 
-- **DEBUG**: Detailed debugging information
-- **INFO**: General information about server operation
-- **WARNING**: Warning messages for potential issues
-- **ERROR**: Error messages for failed operations
-- **CRITICAL**: Critical errors that may cause server failure
+### Outputs
 
-### Log Output
-
-- **File**: `mcp.log` in the server directory
-- **Console**: Standard output during development
-- **Structured**: JSON format for production logging
+- Console: always enabled
+- File: enabled by default (set `MCP_DISABLE_FILE_LOG=true` to turn off)
+- Rotation: size-based by default; can be switched to time-based
 
 ## Health Check
 
@@ -499,6 +509,7 @@ curl -X POST http://localhost:8000/messages/ \
 - **status**: `healthy` or `unhealthy`
 - **plugins**: Number of discovered plugins
 - **plugin_names**: List of plugin names
+ - **metrics**: Basic runtime metrics (uptime, tool call counts)
 
 ## Configuration
 
