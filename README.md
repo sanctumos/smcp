@@ -9,11 +9,24 @@
 
 SMCP is a powerful, plugin-based Model Context Protocol (MCP) server for the Sanctum Letta AI framework. This server provides seamless integration between AI clients and external tools through a robust plugin architecture. As a Sanctum Core Module, it represents the official, production-ready implementation maintained by the Sanctum team.
 
+## 🔄 Recent Updates
+
+### FastMCP to Base MCP Library Migration
+
+SMCP has been completely rewritten to use the base MCP library instead of FastMCP for full compatibility with Letta's SSE client:
+
+- ✅ **Bidirectional SSE**: Proper client↔server communication
+- ✅ **Letta Compatible**: Tools appear in both test and attached modes
+- ✅ **Production Ready**: Robust error handling and graceful shutdown
+- ✅ **Plugin System**: Dynamic discovery and execution
+
+**Why the change?** FastMCP's SSE implementation is unidirectional (server→client only), which breaks compatibility with Letta's bidirectional SSE client requirements.
+
 ## 🚀 Features
 
 - **Plugin Architecture**: Easy-to-write plugins for any external service or tool
 - **MCP Protocol Compliant**: Full support for the Model Context Protocol specification
-- **SSE Transport**: Real-time server-sent events for efficient communication
+- **SSE Transport**: Bidirectional server-sent events for efficient communication with Letta
 - **JSON-RPC 2.0**: Standardized request/response handling
 - **Auto-Discovery**: Automatic plugin detection and tool registration
 - **Health Monitoring**: Built-in health checks and status reporting
