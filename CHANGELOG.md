@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2025-01-XX
+
+### 🚨 BREAKING CHANGE - FastMCP to Base MCP Library Migration
+
+This release represents a complete rewrite of the SMCP server, migrating from FastMCP to the base MCP library to achieve full compatibility with Letta's SSE client.
+
+### 🔄 Changed
+
+- **Complete Architecture Rewrite**: Migrated from FastMCP to base MCP library (`mcp.server.Server` + `mcp.server.sse.SseServerTransport`)
+- **SSE Implementation**: Now uses proper bidirectional SSE communication instead of unidirectional FastMCP SSE
+- **Server Name**: Changed from "sanctum-letta-mcp" to maintain Sanctum branding
+- **Dependencies**: Updated MCP library requirement to >=1.17.0
+
+### ✅ Fixed
+
+- **Letta Compatibility**: Tools now appear in both test mode and attached mode
+- **Bidirectional Communication**: Proper client↔server communication over SSE
+- **Session Management**: Correct handling of MCP protocol initialization and tool calls
+- **Tool Schema Validation**: Valid JSON schemas that pass Letta's strict validation
+
+### 🎯 Why This Change?
+
+FastMCP's SSE implementation is unidirectional (server→client only), which breaks compatibility with Letta's bidirectional SSE client requirements. The base MCP library provides the proper bidirectional SSE transport needed for full Letta integration.
+
+### 📚 Documentation
+
+- **Updated**: Letta MCP Connection Guide with FastMCP compatibility warnings
+- **Added**: FastMCP vs Base MCP Library comparison section
+- **Enhanced**: Troubleshooting section with FastMCP-specific issues
+- **Added**: Real-world success story from our implementation
+
 ## [3.0.0] - 2025-07-11
 
 ### 🎉 Major Release - Complete Overhaul
