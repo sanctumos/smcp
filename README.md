@@ -71,33 +71,33 @@ SMCP can also function as a standalone repository for development, testing, or c
 
 4. **Run the server**
    ```bash
-   python smcp/mcp_server.py
+   python smcp.py
    ```
 
-The server will start on `http://localhost:8000` by default with **localhost + Docker container access** for development environments.
+The server will start on `http://localhost:8000` by default with **localhost-only** access for security.
 
 ### Security Features
 
-By default, the server binds to all interfaces (0.0.0.0) to allow connections from both the local machine and Docker containers running on the same host. This is ideal for development environments where Docker containers need to communicate with the MCP server.
+By default, the server binds to localhost only (127.0.0.1) for security. This is the recommended setting.
 
-**For localhost-only access** (more restrictive):
+**For localhost-only access** (default):
 ```bash
-python smcp/mcp_server.py --host 127.0.0.1
+python smcp.py --host 127.0.0.1
 ```
 
 **To allow external connections** (use with caution):
 ```bash
-python smcp/mcp_server.py --allow-external
+python smcp.py --allow-external
 ```
 
 **Custom port**:
 ```bash
-python smcp/mcp_server.py --port 9000
+python smcp.py --port 9000
 ```
 
 **Custom host binding**:
 ```bash
-python smcp/mcp_server.py --host 0.0.0.0 --port 8000
+python smcp.py --host 0.0.0.0 --port 8000
 ```
 
 ## 🔧 Configuration
@@ -117,25 +117,25 @@ When deployed via the master Sanctum installer, SMCP is automatically:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_PORT` | `8000` | Port for the MCP server |
-| `MCP_PLUGINS_DIR` | `smcp/plugins/` | Directory containing plugins |
-| `MCP_HOST` | `0.0.0.0` | Host to bind to (default: all interfaces for Docker compatibility) |
+| `MCP_PLUGINS_DIR` | `plugins/` | Directory containing plugins |
+| `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost for security) |
 
 ### Example Configuration
 
 ```bash
-# Default: localhost + Docker containers
-python smcp/mcp_server.py
+# Default: localhost-only
+python smcp.py
 
 # Custom port
 export MCP_PORT=9000
-python smcp/mcp_server.py
+python smcp.py
 
-# Localhost-only (more restrictive)
-python smcp/mcp_server.py --host 127.0.0.1
+# Localhost-only (default)
+python smcp.py --host 127.0.0.1
 
 # Custom plugins directory
 export MCP_PLUGINS_DIR=/path/to/custom/plugins
-python smcp/mcp_server.py
+python smcp.py
 ```
 
 ## 🔌 Plugin Development
@@ -170,7 +170,7 @@ The server supports symbolic links for flexible plugin deployment. You can centr
 └── custom-plugin/
 
 # MCP server plugin directory with symlinks
-smcp/plugins/
+plugins/
 ├── botfather -> /opt/sanctum/plugins/botfather
 ├── devops -> /opt/sanctum/plugins/devops
 └── custom-plugin -> /opt/sanctum/plugins/custom-plugin
@@ -191,17 +191,17 @@ You can override the plugin directory using the `MCP_PLUGINS_DIR` environment va
 ```bash
 # Use custom plugin directory
 export MCP_PLUGINS_DIR=/opt/sanctum/plugins
-python smcp/mcp_server.py
+python smcp.py
 ```
 
 ### Creating a Plugin
 
 1. **Create plugin directory**
    ```bash
-   mkdir -p smcp/plugins/my_plugin
+   mkdir -p plugins/my_plugin
    ```
 
-2. **Create the CLI interface** (`smcp/plugins/my_plugin/cli.py`)
+2. **Create the CLI interface** (`plugins/my_plugin/cli.py`)
    ```python
    #!/usr/bin/env python3
    """
@@ -248,12 +248,12 @@ python smcp/mcp_server.py
 
 3. **Make it executable**
    ```bash
-   chmod +x smcp/plugins/my_plugin/cli.py
+   chmod +x plugins/my_plugin/cli.py
    ```
 
 4. **Test your plugin**
    ```bash
-   python smcp/plugins/my_plugin/cli.py my-command --param "test" --optional "value"
+   python plugins/my_plugin/cli.py my-command --param "test" --optional "value"
    ```
 
 ### Plugin Best Practices

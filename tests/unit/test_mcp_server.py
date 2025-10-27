@@ -16,14 +16,19 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from smcp.mcp_server import (
-    discover_plugins,
-    get_plugin_help,
-    execute_plugin_tool,
-    create_tool_from_plugin,
-    register_plugin_tools,
-    plugin_registry
-)
+# Import the functions we want to test from smcp.py directly
+import importlib.util
+spec = importlib.util.spec_from_file_location("smcp_module", "smcp.py")
+smcp_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(smcp_module)
+
+# Import the functions we want to test
+discover_plugins = smcp_module.discover_plugins
+get_plugin_help = smcp_module.get_plugin_help
+execute_plugin_tool = smcp_module.execute_plugin_tool
+create_tool_from_plugin = smcp_module.create_tool_from_plugin
+register_plugin_tools = smcp_module.register_plugin_tools
+plugin_registry = smcp_module.plugin_registry
 
 
 class TestPluginDiscovery:
@@ -51,7 +56,7 @@ class TestPluginDiscovery:
     def test_discover_plugins_default_path(self, tmp_path):
         """Test plugin discovery with default path."""
         # Mock the plugins directory relative to the script
-        with patch("smcp.mcp_server.Path") as mock_path:
+        with patch("pathlib.Path") as mock_path:
             mock_path.return_value.__truediv__.return_value = tmp_path / "plugins"
             plugins_dir = tmp_path / "plugins"
             plugins_dir.mkdir()
@@ -102,7 +107,7 @@ class TestPluginDiscovery:
 class TestPluginHelp:
     """Test plugin help functionality."""
     
-    @patch("smcp.mcp_server.subprocess.run")
+    @patch("smcp_module.subprocess.run")
     def test_get_plugin_help_success(self, mock_run):
         """Test successful plugin help retrieval."""
         mock_run.return_value.returncode = 0
@@ -118,7 +123,7 @@ class TestPluginHelp:
             timeout=10
         )
     
-    @patch("smcp.mcp_server.subprocess.run")
+    @patch("smcp_module.subprocess.run")
     def test_get_plugin_help_failure(self, mock_run):
         """Test plugin help retrieval failure."""
         mock_run.return_value.returncode = 1
@@ -128,7 +133,7 @@ class TestPluginHelp:
         
         assert help_text == ""
     
-    @patch("smcp.mcp_server.subprocess.run")
+    @patch("smcp_module.subprocess.run")
     def test_get_plugin_help_timeout(self, mock_run):
         """Test plugin help retrieval timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
@@ -149,7 +154,7 @@ class TestToolExecution:
         ctx.error = AsyncMock()
         return ctx
     
-    @patch("smcp.mcp_server.asyncio.create_subprocess_exec")
+    @patch("smcp_module.asyncio.create_subprocess_exec")
     async def test_execute_plugin_tool_success(self, mock_subprocess, mock_ctx):
         """Test successful tool execution."""
         # Mock subprocess
@@ -159,14 +164,14 @@ class TestToolExecution:
         mock_subprocess.return_value = mock_process
         
         # Mock plugin registry
-        with patch("smcp.mcp_server.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
             result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"}, mock_ctx)
         
         assert result["result"] == "Success output"
         mock_ctx.info.assert_called()
         mock_subprocess.assert_called_once()
     
-    @patch("smcp.mcp_server.asyncio.create_subprocess_exec")
+    @patch("smcp_module.asyncio.create_subprocess_exec")
     async def test_execute_plugin_tool_failure(self, mock_subprocess, mock_ctx):
         """Test tool execution failure."""
         # Mock subprocess
@@ -176,7 +181,7 @@ class TestToolExecution:
         mock_subprocess.return_value = mock_process
         
         # Mock plugin registry
-        with patch("smcp.mcp_server.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
             result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"}, mock_ctx)
         
         assert result["error"] == "Error output"
@@ -191,18 +196,18 @@ class TestToolExecution:
     
     async def test_execute_plugin_tool_nonexistent_plugin(self, mock_ctx):
         """Test tool execution with nonexistent plugin."""
-        with patch("smcp.mcp_server.plugin_registry", {}):
+        with patch("smcp_module.plugin_registry", {}):
             result = await execute_plugin_tool("nonexistent_plugin.command", {}, mock_ctx)
         
         assert "error" in result
         assert "Plugin 'nonexistent_plugin' not found" in result["error"]
     
-    @patch("smcp.mcp_server.asyncio.create_subprocess_exec")
+    @patch("smcp_module.asyncio.create_subprocess_exec")
     async def test_execute_plugin_tool_exception(self, mock_subprocess, mock_ctx):
         """Test tool execution with exception."""
         mock_subprocess.side_effect = Exception("Subprocess error")
         
-        with patch("smcp.mcp_server.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
             result = await execute_plugin_tool("test_plugin.test_command", {}, mock_ctx)
         
         assert "error" in result
@@ -213,13 +218,13 @@ class TestToolExecution:
 class TestToolCreation:
     """Test tool creation functionality."""
     
-    @patch("smcp.mcp_server.get_plugin_help")
+    @patch("smcp_module.get_plugin_help")
     def test_create_tool_from_plugin_click_button(self, mock_help):
         """Test creating click-button tool."""
         mock_help.return_value = "Help text"
         
         # Mock the server.tool decorator
-        with patch("smcp.mcp_server.server") as mock_server:
+        with patch("smcp_module.server") as mock_server:
             create_tool_from_plugin("botfather", "click-button", "/path/to/cli.py")
             
             # Verify tool was registered
@@ -228,24 +233,24 @@ class TestToolCreation:
             assert call_args[1]["name"] == "botfather.click-button"
             assert "button-text" in call_args[1]["description"]
     
-    @patch("smcp.mcp_server.get_plugin_help")
+    @patch("smcp_module.get_plugin_help")
     def test_create_tool_from_plugin_send_message(self, mock_help):
         """Test creating send-message tool."""
         mock_help.return_value = "Help text"
         
-        with patch("smcp.mcp_server.server") as mock_server:
+        with patch("smcp_module.server") as mock_server:
             create_tool_from_plugin("botfather", "send-message", "/path/to/cli.py")
             
             call_args = mock_server.tool.call_args
             assert call_args[1]["name"] == "botfather.send-message"
             assert "message" in call_args[1]["description"]
     
-    @patch("smcp.mcp_server.get_plugin_help")
+    @patch("smcp_module.get_plugin_help")
     def test_create_tool_from_plugin_deploy(self, mock_help):
         """Test creating deploy tool."""
         mock_help.return_value = "Help text"
         
-        with patch("smcp.mcp_server.server") as mock_server:
+        with patch("smcp_module.server") as mock_server:
             create_tool_from_plugin("devops", "deploy", "/path/to/cli.py")
             
             call_args = mock_server.tool.call_args
@@ -256,9 +261,9 @@ class TestToolCreation:
 class TestToolRegistration:
     """Test tool registration functionality."""
     
-    @patch("smcp.mcp_server.discover_plugins")
-    @patch("smcp.mcp_server.get_plugin_help")
-    @patch("smcp.mcp_server.create_tool_from_plugin")
+    @patch("smcp_module.discover_plugins")
+    @patch("smcp_module.get_plugin_help")
+    @patch("smcp_module.create_tool_from_plugin")
     def test_register_plugin_tools(self, mock_create_tool, mock_help, mock_discover):
         """Test plugin tool registration."""
         # Mock discovered plugins
@@ -270,7 +275,7 @@ class TestToolRegistration:
         mock_help.return_value = "Available commands:\n  test-command\n  another-command"
         
         # Mock global plugin_registry
-        with patch("smcp.mcp_server.plugin_registry", {}):
+        with patch("smcp_module.plugin_registry", {}):
             register_plugin_tools()
             
             # Verify tools were created
@@ -279,9 +284,9 @@ class TestToolRegistration:
             assert calls[0][0] == ("test_plugin", "test-command", "/path/to/cli.py")
             assert calls[1][0] == ("test_plugin", "another-command", "/path/to/cli.py")
     
-    @patch("smcp.mcp_server.discover_plugins")
-    @patch("smcp.mcp_server.get_plugin_help")
-    @patch("smcp.mcp_server.create_tool_from_plugin")
+    @patch("smcp_module.discover_plugins")
+    @patch("smcp_module.get_plugin_help")
+    @patch("smcp_module.create_tool_from_plugin")
     def test_register_plugin_tools_no_commands(self, mock_create_tool, mock_help, mock_discover):
         """Test plugin tool registration with no commands."""
         mock_discover.return_value = {
@@ -291,7 +296,7 @@ class TestToolRegistration:
         # Mock help text without commands section
         mock_help.return_value = "Just some help text"
         
-        with patch("smcp.mcp_server.plugin_registry", {}):
+        with patch("smcp_module.plugin_registry", {}):
             register_plugin_tools()
             
             # No tools should be created
@@ -311,10 +316,10 @@ class TestHealthTool:
     async def test_health_check_success(self, mock_ctx):
         """Test successful health check."""
         # Import the health check function
-        from smcp.mcp_server import health_check
+        from smcp_module import health_check
         
         # Mock plugin registry
-        with patch("smcp.mcp_server.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
             result = await health_check(mock_ctx)
         
         assert len(result) == 1
@@ -328,9 +333,9 @@ class TestHealthTool:
     
     async def test_health_check_no_plugins(self, mock_ctx):
         """Test health check with no plugins."""
-        from smcp.mcp_server import health_check
+        from smcp_module import health_check
         
-        with patch("smcp.mcp_server.plugin_registry", {}):
+        with patch("smcp_module.plugin_registry", {}):
             result = await health_check(mock_ctx)
         
         health_data = json.loads(result[0].text)
