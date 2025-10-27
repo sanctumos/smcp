@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sanctum Letta MCP Server - Base MCP Implementation
+Animus Letta MCP Server - Base MCP Implementation
 
 A Server-Sent Events (SSE) server for orchestrating plugin execution using the base MCP library.
 Compliant with Model Context Protocol (MCP) specification and compatible with Letta's SSE client.
@@ -293,14 +293,14 @@ def create_server(host: str, port: int) -> Server:
 def parse_arguments():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Sanctum Letta MCP Server - Base MCP implementation with SSE transport",
+        description="Animus Letta MCP Server - Base MCP implementation with SSE transport",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python smcp.py                    # Run with localhost-only (secure default)
-  python smcp.py --host 127.0.0.1   # Localhost-only (explicit)
-  python smcp.py --allow-external   # Allow external connections
-  python smcp.py --port 9000        # Run on custom port
+  python mcp_server.py                    # Run with localhost-only (secure default)
+  python mcp_server.py --host 127.0.0.1   # Localhost-only (explicit)
+  python mcp_server.py --allow-external   # Allow external connections
+  python mcp_server.py --port 9000        # Run on custom port
         """
     )
     
@@ -340,7 +340,7 @@ async def async_main():
         if host == "127.0.0.1":
             logger.info("🔒 Security: Server bound to localhost only. Use --allow-external for network access.")
     
-    logger.info(f"Starting Sanctum Letta MCP Server on {host}:{args.port}...")
+    logger.info(f"Starting Animus Letta MCP Server on {host}:{args.port}...")
     
     # Create MCP server
     global server
@@ -436,4 +436,3 @@ def main():
 
 if __name__ == "__main__":
     asyncio.run(async_main())
-

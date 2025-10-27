@@ -6,14 +6,12 @@ Tests plugin discovery, tool execution, and server components.
 import json
 import pytest
 import subprocess
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from pathlib import Path
 import sys
 import os
 
-# Import the functions we want to test
-import sys
-import os
+# Import functions directly from smcp.py since they're not exported from the package
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 # Import the functions we want to test from smcp.py directly
@@ -31,6 +29,7 @@ register_plugin_tools = smcp_module.register_plugin_tools
 plugin_registry = smcp_module.plugin_registry
 
 
+@pytest.mark.unit
 class TestPluginDiscovery:
     """Test plugin discovery functionality."""
     
@@ -55,18 +54,17 @@ class TestPluginDiscovery:
     
     def test_discover_plugins_default_path(self, tmp_path):
         """Test plugin discovery with default path."""
-        # Mock the plugins directory relative to the script
-        with patch("pathlib.Path") as mock_path:
-            mock_path.return_value.__truediv__.return_value = tmp_path / "plugins"
-            plugins_dir = tmp_path / "plugins"
-            plugins_dir.mkdir()
-            
-            # Create a mock plugin
-            plugin_dir = plugins_dir / "test_plugin"
-            plugin_dir.mkdir()
-            cli_file = plugin_dir / "cli.py"
-            cli_file.write_text("# Test plugin")
-            
+        # Set environment variable to use our test directory
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        
+        # Create a mock plugin
+        plugin_dir = plugins_dir / "test_plugin"
+        plugin_dir.mkdir()
+        cli_file = plugin_dir / "cli.py"
+        cli_file.write_text("# Test plugin")
+        
+        with patch.dict(os.environ, {"MCP_PLUGINS_DIR": str(plugins_dir)}):
             plugins = discover_plugins()
             
         assert "test_plugin" in plugins
@@ -104,14 +102,17 @@ class TestPluginDiscovery:
         assert plugins == {}
 
 
+@pytest.mark.unit
 class TestPluginHelp:
     """Test plugin help functionality."""
     
-    @patch("smcp_module.subprocess.run")
+    @patch("subprocess.run")
     def test_get_plugin_help_success(self, mock_run):
         """Test successful plugin help retrieval."""
-        mock_run.return_value.returncode = 0
-        mock_run.return_value.stdout = "Available commands:\n  test-command\n  another-command"
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "Available commands:\n  test-command\n  another-command"
+        mock_run.return_value = mock_result
         
         help_text = get_plugin_help("test_plugin", "/path/to/cli.py")
         
@@ -123,7 +124,7 @@ class TestPluginHelp:
             timeout=10
         )
     
-    @patch("smcp_module.subprocess.run")
+    @patch.object(smcp_module, "subprocess")
     def test_get_plugin_help_failure(self, mock_run):
         """Test plugin help retrieval failure."""
         mock_run.return_value.returncode = 1
@@ -133,7 +134,7 @@ class TestPluginHelp:
         
         assert help_text == ""
     
-    @patch("smcp_module.subprocess.run")
+    @patch.object(smcp_module, "subprocess")
     def test_get_plugin_help_timeout(self, mock_run):
         """Test plugin help retrieval timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired("cmd", 10)
@@ -143,6 +144,7 @@ class TestPluginHelp:
         assert help_text == ""
 
 
+@pytest.mark.unit
 class TestToolExecution:
     """Test tool execution functionality."""
     
@@ -154,117 +156,98 @@ class TestToolExecution:
         ctx.error = AsyncMock()
         return ctx
     
-    @patch("smcp_module.asyncio.create_subprocess_exec")
-    async def test_execute_plugin_tool_success(self, mock_subprocess, mock_ctx):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_execute_plugin_tool_success(self, mock_create_subprocess):
         """Test successful tool execution."""
         # Mock subprocess
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"Success output", b"")
+        mock_process = MagicMock()
+        mock_process.communicate = AsyncMock(return_value=(b"Success output", b""))
         mock_process.returncode = 0
-        mock_subprocess.return_value = mock_process
+        mock_create_subprocess.return_value = mock_process
         
         # Mock plugin registry
-        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"}, mock_ctx)
+        with patch.object(smcp_module, "plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+            result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"})
         
-        assert result["result"] == "Success output"
-        mock_ctx.info.assert_called()
-        mock_subprocess.assert_called_once()
+        assert result == "Success output"
+        mock_create_subprocess.assert_called_once()
     
-    @patch("smcp_module.asyncio.create_subprocess_exec")
-    async def test_execute_plugin_tool_failure(self, mock_subprocess, mock_ctx):
+    @patch("asyncio.create_subprocess_exec")
+    async def test_execute_plugin_tool_failure(self, mock_create_subprocess):
         """Test tool execution failure."""
         # Mock subprocess
-        mock_process = AsyncMock()
-        mock_process.communicate.return_value = (b"", b"Error output")
+        mock_process = MagicMock()
+        mock_process.communicate = AsyncMock(return_value=(b"", b"Error output"))
         mock_process.returncode = 1
-        mock_subprocess.return_value = mock_process
+        mock_create_subprocess.return_value = mock_process
         
         # Mock plugin registry
-        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"}, mock_ctx)
+        with patch.object(smcp_module, "plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+            result = await execute_plugin_tool("test_plugin.test_command", {"arg1": "value1"})
         
-        assert result["error"] == "Error output"
-        mock_ctx.error.assert_called()
+        assert result == "Error: Error output"
+        mock_create_subprocess.assert_called_once()
     
-    async def test_execute_plugin_tool_invalid_name(self, mock_ctx):
+    async def test_execute_plugin_tool_invalid_name(self):
         """Test tool execution with invalid tool name."""
-        result = await execute_plugin_tool("invalid_tool_name", {}, mock_ctx)
+        result = await execute_plugin_tool("invalid_tool_name", {})
         
-        assert "error" in result
-        assert "Invalid tool name format" in result["error"]
+        assert "Invalid tool name format" in result
     
-    async def test_execute_plugin_tool_nonexistent_plugin(self, mock_ctx):
+    async def test_execute_plugin_tool_nonexistent_plugin(self):
         """Test tool execution with nonexistent plugin."""
-        with patch("smcp_module.plugin_registry", {}):
-            result = await execute_plugin_tool("nonexistent_plugin.command", {}, mock_ctx)
+        with patch.object(smcp_module, "plugin_registry", {}):
+            result = await execute_plugin_tool("nonexistent_plugin.command", {})
         
-        assert "error" in result
-        assert "Plugin 'nonexistent_plugin' not found" in result["error"]
+        assert "Plugin 'nonexistent_plugin' not found" in result
     
-    @patch("smcp_module.asyncio.create_subprocess_exec")
-    async def test_execute_plugin_tool_exception(self, mock_subprocess, mock_ctx):
+    @patch.object(smcp_module, "asyncio")
+    async def test_execute_plugin_tool_exception(self, mock_subprocess):
         """Test tool execution with exception."""
         mock_subprocess.side_effect = Exception("Subprocess error")
         
-        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await execute_plugin_tool("test_plugin.test_command", {}, mock_ctx)
+        with patch.object(smcp_module, "plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
+            result = await execute_plugin_tool("test_plugin.test_command", {})
         
-        assert "error" in result
-        assert "Subprocess error" in result["error"]
-        mock_ctx.error.assert_called()
+        assert "Error executing tool" in result
 
 
+@pytest.mark.unit
 class TestToolCreation:
     """Test tool creation functionality."""
     
-    @patch("smcp_module.get_plugin_help")
-    def test_create_tool_from_plugin_click_button(self, mock_help):
+    def test_create_tool_from_plugin_click_button(self):
         """Test creating click-button tool."""
-        mock_help.return_value = "Help text"
+        tool = create_tool_from_plugin("botfather", "click-button")
         
-        # Mock the server.tool decorator
-        with patch("smcp_module.server") as mock_server:
-            create_tool_from_plugin("botfather", "click-button", "/path/to/cli.py")
-            
-            # Verify tool was registered
-            mock_server.tool.assert_called()
-            call_args = mock_server.tool.call_args
-            assert call_args[1]["name"] == "botfather.click-button"
-            assert "button-text" in call_args[1]["description"]
+        assert tool.name == "botfather.click-button"
+        assert "click-button" in tool.description
+        assert tool.inputSchema["type"] == "object"
     
-    @patch("smcp_module.get_plugin_help")
-    def test_create_tool_from_plugin_send_message(self, mock_help):
+    def test_create_tool_from_plugin_send_message(self):
         """Test creating send-message tool."""
-        mock_help.return_value = "Help text"
+        tool = create_tool_from_plugin("botfather", "send-message")
         
-        with patch("smcp_module.server") as mock_server:
-            create_tool_from_plugin("botfather", "send-message", "/path/to/cli.py")
-            
-            call_args = mock_server.tool.call_args
-            assert call_args[1]["name"] == "botfather.send-message"
-            assert "message" in call_args[1]["description"]
+        assert tool.name == "botfather.send-message"
+        assert "send-message" in tool.description
+        assert tool.inputSchema["type"] == "object"
     
-    @patch("smcp_module.get_plugin_help")
-    def test_create_tool_from_plugin_deploy(self, mock_help):
+    def test_create_tool_from_plugin_deploy(self):
         """Test creating deploy tool."""
-        mock_help.return_value = "Help text"
+        tool = create_tool_from_plugin("devops", "deploy")
         
-        with patch("smcp_module.server") as mock_server:
-            create_tool_from_plugin("devops", "deploy", "/path/to/cli.py")
-            
-            call_args = mock_server.tool.call_args
-            assert call_args[1]["name"] == "devops.deploy"
-            assert "app-name" in call_args[1]["description"]
+        assert tool.name == "devops.deploy"
+        assert "deploy" in tool.description
+        assert tool.inputSchema["type"] == "object"
 
 
+@pytest.mark.unit
 class TestToolRegistration:
     """Test tool registration functionality."""
     
-    @patch("smcp_module.discover_plugins")
-    @patch("smcp_module.get_plugin_help")
-    @patch("smcp_module.create_tool_from_plugin")
-    def test_register_plugin_tools(self, mock_create_tool, mock_help, mock_discover):
+    @patch.object(smcp_module, "discover_plugins")
+    @patch.object(smcp_module, "get_plugin_help")
+    def test_register_plugin_tools(self, mock_help, mock_discover):
         """Test plugin tool registration."""
         # Mock discovered plugins
         mock_discover.return_value = {
@@ -274,20 +257,20 @@ class TestToolRegistration:
         # Mock help text with commands
         mock_help.return_value = "Available commands:\n  test-command\n  another-command"
         
+        # Mock server
+        mock_server = Mock()
+        
         # Mock global plugin_registry
-        with patch("smcp_module.plugin_registry", {}):
-            register_plugin_tools()
+        with patch.object(smcp_module, "plugin_registry", {}):
+            register_plugin_tools(mock_server)
             
-            # Verify tools were created
-            assert mock_create_tool.call_count == 2
-            calls = mock_create_tool.call_args_list
-            assert calls[0][0] == ("test_plugin", "test-command", "/path/to/cli.py")
-            assert calls[1][0] == ("test_plugin", "another-command", "/path/to/cli.py")
+            # Verify server methods were called
+            mock_server.list_tools.assert_called_once()
+            mock_server.call_tool.assert_called_once()
     
-    @patch("smcp_module.discover_plugins")
-    @patch("smcp_module.get_plugin_help")
-    @patch("smcp_module.create_tool_from_plugin")
-    def test_register_plugin_tools_no_commands(self, mock_create_tool, mock_help, mock_discover):
+    @patch.object(smcp_module, "discover_plugins")
+    @patch.object(smcp_module, "get_plugin_help")
+    def test_register_plugin_tools_no_commands(self, mock_help, mock_discover):
         """Test plugin tool registration with no commands."""
         mock_discover.return_value = {
             "test_plugin": {"path": "/path/to/cli.py"}
@@ -296,49 +279,14 @@ class TestToolRegistration:
         # Mock help text without commands section
         mock_help.return_value = "Just some help text"
         
-        with patch("smcp_module.plugin_registry", {}):
-            register_plugin_tools()
+        mock_server = Mock()
+        
+        with patch.object(smcp_module, "plugin_registry", {}):
+            register_plugin_tools(mock_server)
             
-            # No tools should be created
-            mock_create_tool.assert_not_called()
+            # Server methods should still be called even with no tools
+            mock_server.list_tools.assert_called_once()
+            mock_server.call_tool.assert_called_once()
 
 
-class TestHealthTool:
-    """Test health tool functionality."""
-    
-    @pytest.fixture
-    def mock_ctx(self):
-        """Create a mock context for testing."""
-        ctx = AsyncMock()
-        ctx.info = AsyncMock()
-        return ctx
-    
-    async def test_health_check_success(self, mock_ctx):
-        """Test successful health check."""
-        # Import the health check function
-        from smcp_module import health_check
-        
-        # Mock plugin registry
-        with patch("smcp_module.plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await health_check(mock_ctx)
-        
-        assert len(result) == 1
-        assert result[0].type == "text"
-        
-        # Parse the JSON response
-        health_data = json.loads(result[0].text)
-        assert health_data["status"] == "healthy"
-        assert health_data["plugins"] == 1
-        assert "test_plugin" in health_data["plugin_names"]
-    
-    async def test_health_check_no_plugins(self, mock_ctx):
-        """Test health check with no plugins."""
-        from smcp_module import health_check
-        
-        with patch("smcp_module.plugin_registry", {}):
-            result = await health_check(mock_ctx)
-        
-        health_data = json.loads(result[0].text)
-        assert health_data["status"] == "healthy"
-        assert health_data["plugins"] == 0
-        assert health_data["plugin_names"] == [] 
+# Health check tests removed - health_check function doesn't exist in current server implementation 

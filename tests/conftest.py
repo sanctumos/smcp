@@ -27,14 +27,14 @@ import aiohttp
 from aiohttp.test_utils import TestClient, TestServer
 from pathlib import Path
 import pytest_asyncio
-
 # Ensure pytest-asyncio plugin is loaded even if auto-discovery is disabled
 pytest_plugins = ("pytest_asyncio",)
 
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from smcp import discover_plugins, execute_plugin_tool, server
+# Import functions directly from smcp.py since they're not exported from the package
+import smcp
 
 
 @pytest.fixture
@@ -154,19 +154,4 @@ def temp_plugins_dir_with_plugins(request, temp_plugins_dir):
     return temp_plugins_dir
 
 
-@pytest_asyncio.fixture
-async def fastmcp_server(temp_plugins_dir_with_plugins):
-    """Create a test FastMCP server instance."""
-    # Import here to avoid circular imports
-    from smcp import server, register_plugin_tools
-    
-    # Register plugin tools for testing
-    register_plugin_tools()
-    
-    return server
-
-
-@pytest_asyncio.fixture
-async def sse_app(fastmcp_server):
-    """Create a test SSE application instance."""
-    return fastmcp_server.sse_app() 
+# FastMCP-specific fixtures removed - current server uses base MCP with SSE transport 
