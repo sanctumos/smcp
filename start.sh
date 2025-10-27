@@ -5,4 +5,4 @@
 source venv/bin/activate
 
 # Start Sanctum MCP server with auto-reload and log to file
-python smcp/mcp_server.py --allow-external 2>&1 | tee server.log
+python smcp.py --allow-external 2>&1 | tee server.log

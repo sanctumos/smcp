@@ -44,4 +44,7 @@ docs/dev/
 
 # Distribution
 dist/
-build/ 
+build/
+
+# Temporary files
+tmp/ 

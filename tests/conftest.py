@@ -34,7 +34,7 @@ pytest_plugins = ("pytest_asyncio",)
 # Add the project root to the path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from smcp.mcp_server import discover_plugins, execute_plugin_tool, server
+from smcp import discover_plugins, execute_plugin_tool, server
 
 
 @pytest.fixture
@@ -158,7 +158,7 @@ def temp_plugins_dir_with_plugins(request, temp_plugins_dir):
 async def fastmcp_server(temp_plugins_dir_with_plugins):
     """Create a test FastMCP server instance."""
     # Import here to avoid circular imports
-    from smcp.mcp_server import server, register_plugin_tools
+    from smcp import server, register_plugin_tools
     
     # Register plugin tools for testing
     register_plugin_tools()
