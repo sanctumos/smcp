@@ -285,7 +285,7 @@ def register_plugin_tools(server: Server):
 def create_server(host: str, port: int) -> Server:
     """Create and configure the MCP server instance."""
     # Create base MCP server (not FastMCP)
-    server = Server(name="animus-letta-mcp", version="1.0.0")
+    server = Server(name="sanctum-letta-mcp", version="1.0.0")
     
     return server
 
