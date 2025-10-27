@@ -991,10 +991,10 @@ logging.getLogger('letta.services.mcp').setLevel(logging.DEBUG)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [Server-Sent Events Specification](https://html.spec.whatwg.org/multipage/server-sent-events.html)
-- [Letta Documentation](https://animus.uno)
+- [Letta Documentation](https://sanctumos.io)
 
 ---
 
 This guide provides the complete specifications needed to implement an MCP server that integrates seamlessly with Letta. Follow the SSE endpoint specifications carefully, and use the provided examples as starting points for your implementation.
 
-> **Note**: This repository has been graduated to **Animus Core Module** status. Visit [animus.uno](https://animus.uno) for more information. 
+> **Note**: This is the Sanctum edition of the Letta MCP server. 
