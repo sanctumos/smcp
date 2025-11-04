@@ -26,6 +26,56 @@ smcp/plugins/
 2. **Command Structure**: Each command becomes a tool available to AI clients
 3. **Parameter Validation**: Input validation and error handling
 4. **JSON Output**: Structured responses for the MCP protocol
+5. **Plugin Introspection** (Recommended): `--describe` command for structured plugin metadata
+
+## Plugin Discovery Methods
+
+SMCP supports two methods for discovering plugin commands:
+
+### Method 1: `--describe` Command (Recommended)
+
+The preferred method is implementing a `--describe` command that returns structured JSON metadata about your plugin. This provides:
+
+- **Reliable Discovery**: No dependency on help text formatting
+- **Parameter Schemas**: Full type information for AI clients
+- **Better Documentation**: Rich descriptions and metadata
+- **Future-Proof**: Extensible for additional metadata
+
+**JSON Format:**
+```json
+{
+  "plugin": {
+    "name": "plugin_name",
+    "version": "1.0.0",
+    "description": "Plugin description"
+  },
+  "commands": [
+    {
+      "name": "command-name",
+      "description": "Command description",
+      "parameters": [
+        {
+          "name": "param-name",
+          "type": "string|number|integer|boolean|array|object",
+          "description": "Parameter description",
+          "required": true,
+          "default": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Method 2: Help Text Scraping (Fallback)
+
+For backward compatibility, SMCP can still parse commands from the `--help` output by looking for an "Available commands:" section in the epilog. This method:
+
+- **Works with existing plugins**: No changes required
+- **Limited functionality**: No parameter schemas
+- **Brittle**: Depends on exact text formatting
+
+**Note**: New plugins should implement `--describe` for better functionality.
 
 ## Creating Your First Plugin
 
@@ -164,6 +214,109 @@ python cli.py hello --name "World" --greeting "Hi"
 # Test calculate command
 python cli.py calculate --operation add --a 5 --b 3
 ```
+
+## Implementing `--describe` Command
+
+To enable full functionality with parameter schemas, implement the `--describe` command in your plugin:
+
+```python
+def get_plugin_description() -> Dict[str, Any]:
+    """Return structured plugin description."""
+    return {
+        "plugin": {
+            "name": "my_first_plugin",
+            "version": "1.0.0",
+            "description": "My First Plugin - A sample plugin for Animus Letta MCP"
+        },
+        "commands": [
+            {
+                "name": "hello",
+                "description": "Say hello to someone",
+                "parameters": [
+                    {
+                        "name": "name",
+                        "type": "string",
+                        "description": "Name to greet",
+                        "required": True,
+                        "default": None
+                    },
+                    {
+                        "name": "greeting",
+                        "type": "string",
+                        "description": "Greeting message",
+                        "required": False,
+                        "default": "Hello"
+                    }
+                ]
+            },
+            {
+                "name": "calculate",
+                "description": "Perform a calculation",
+                "parameters": [
+                    {
+                        "name": "operation",
+                        "type": "string",
+                        "description": "Mathematical operation (add, subtract, multiply, divide)",
+                        "required": True,
+                        "default": None
+                    },
+                    {
+                        "name": "a",
+                        "type": "number",
+                        "description": "First number",
+                        "required": True,
+                        "default": None
+                    },
+                    {
+                        "name": "b",
+                        "type": "number",
+                        "description": "Second number",
+                        "required": True,
+                        "default": None
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def main():
+    """Main entry point for the plugin CLI."""
+    parser = argparse.ArgumentParser(
+        description="My First Plugin - A sample plugin for Animus Letta MCP"
+    )
+    
+    # Add --describe flag
+    parser.add_argument("--describe", action="store_true",
+                       help="Output plugin description in JSON format")
+    
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    
+    # Add your commands here
+    setup_hello_command(subparsers)
+    setup_calculate_command(subparsers)
+    
+    args = parser.parse_args()
+    
+    # Handle --describe flag
+    if args.describe:
+        description = get_plugin_description()
+        print(json.dumps(description, indent=2))
+        sys.exit(0)
+    
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+    
+    # ... rest of command execution ...
+```
+
+**Key Points:**
+- `--describe` should return valid JSON matching the expected format
+- Parameter types should be: `string`, `number`, `integer`, `boolean`, `array`, or `object`
+- Required parameters should have `"required": true`
+- Optional parameters should have `"required": false` and optionally a `"default"` value
+- The command will be called by SMCP during plugin discovery
 
 ## Advanced Plugin Development
 

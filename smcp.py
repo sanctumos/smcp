@@ -147,6 +147,93 @@ def get_plugin_help(plugin_name: str, cli_path: str) -> str:
         return ""
 
 
+def get_plugin_describe(plugin_name: str, cli_path: str) -> Dict[str, Any] | None:
+    """
+    Get plugin description using --describe command (new method).
+    
+    Returns structured plugin spec or None if not supported.
+    Expected JSON format:
+    {
+        "plugin": {
+            "name": "plugin_name",
+            "version": "1.0.0",
+            "description": "Plugin description"
+        },
+        "commands": [
+            {
+                "name": "command-name",
+                "description": "Command description",
+                "parameters": [
+                    {
+                        "name": "param-name",
+                        "type": "string|number|boolean|array|object",
+                        "description": "Parameter description",
+                        "required": true,
+                        "default": null
+                    }
+                ]
+            }
+        ]
+    }
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, cli_path, "--describe"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            try:
+                spec = json.loads(result.stdout.strip())
+                # Validate basic structure
+                if "commands" in spec and isinstance(spec["commands"], list):
+                    return spec
+                else:
+                    logger.warning(f"Plugin {plugin_name} --describe returned invalid structure")
+                    return None
+            except json.JSONDecodeError as e:
+                logger.warning(f"Plugin {plugin_name} --describe returned invalid JSON: {e}")
+                return None
+        else:
+            # --describe not supported, return None to trigger fallback
+            return None
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Plugin {plugin_name} --describe command timed out")
+        return None
+    except Exception as e:
+        logger.debug(f"Plugin {plugin_name} --describe failed (will use fallback): {e}")
+        return None
+
+
+def parse_commands_from_help(help_text: str) -> List[str]:
+    """
+    Parse command names from help text (fallback method for old plugins).
+    
+    Looks for "Available commands:" section and extracts command names.
+    """
+    lines = help_text.split('\n')
+    commands = []
+    in_commands_section = False
+    
+    for line in lines:
+        if line.strip().startswith("Available commands:"):
+            in_commands_section = True
+            continue
+        if in_commands_section:
+            # End of commands section if we hit an empty line or Examples
+            if not line.strip() or line.strip().startswith("Examples"):
+                in_commands_section = False
+                continue
+            if line.startswith('  '):
+                parts = line.strip().split()
+                if parts and parts[0] not in ['usage:', 'options:', 'Available', 'Examples:']:
+                    commands.append(parts[0])
+    
+    return commands
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
@@ -200,29 +287,111 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         return error_msg
 
 
-def create_tool_from_plugin(plugin_name: str, command: str) -> Tool:
-    """Create an MCP Tool from a plugin command."""
+def parameter_spec_to_json_schema(parameters: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Convert plugin parameter spec to JSON Schema for MCP tools.
+    
+    Args:
+        parameters: List of parameter specs from --describe output
+            Each parameter should have: name, type, description, required, default
+    
+    Returns:
+        JSON Schema object with properties and required fields
+    """
+    properties = {}
+    required = []
+    
+    for param in parameters:
+        param_name = param.get("name", "")
+        param_type = param.get("type", "string")
+        param_desc = param.get("description", "")
+        param_required = param.get("required", False)
+        param_default = param.get("default")
+        
+        # Map plugin types to JSON Schema types
+        json_type_map = {
+            "string": "string",
+            "number": "number",
+            "integer": "integer",
+            "boolean": "boolean",
+            "array": "array",
+            "object": "object",
+        }
+        
+        json_type = json_type_map.get(param_type.lower(), "string")
+        
+        # Build property schema
+        prop_schema = {"type": json_type}
+        
+        if param_desc:
+            prop_schema["description"] = param_desc
+        
+        if param_default is not None:
+            prop_schema["default"] = param_default
+        
+        # Handle arrays - assume array of strings if not specified
+        if json_type == "array":
+            prop_schema["items"] = {"type": "string"}
+        
+        properties[param_name] = prop_schema
+        
+        if param_required:
+            required.append(param_name)
+    
+    schema = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False
+    }
+    
+    return schema
+
+
+def create_tool_from_plugin(plugin_name: str, command: str, command_spec: Dict[str, Any] | None = None) -> Tool:
+    """
+    Create an MCP Tool from a plugin command.
+    
+    Args:
+        plugin_name: Name of the plugin
+        command: Name of the command
+        command_spec: Optional command specification from --describe output
+            If provided, will extract description and parameters for schema
+    """
     tool_name = f"{plugin_name}.{command}"
     
-    # Create a description based on the plugin and command
-    description = f"Execute {plugin_name} {command} command"
-    
-    # Create a valid schema that passes Letta's validation
-    # Use a simple object schema with no properties (empty object)
-    return Tool(
-        name=tool_name,
-        description=description,
-        inputSchema={
+    # Extract description from spec if available
+    if command_spec:
+        description = command_spec.get("description", f"Execute {plugin_name} {command} command")
+        parameters = command_spec.get("parameters", [])
+        
+        # Build schema from parameters
+        input_schema = parameter_spec_to_json_schema(parameters)
+    else:
+        # Fallback: simple description and empty schema
+        description = f"Execute {plugin_name} {command} command"
+        input_schema = {
             "type": "object",
             "properties": {},
             "required": [],
             "additionalProperties": False
         }
+    
+    return Tool(
+        name=tool_name,
+        description=description,
+        inputSchema=input_schema
     )
 
 
 def register_plugin_tools(server: Server):
-    """Register all discovered plugin tools with the MCP server."""
+    """
+    Register all discovered plugin tools with the MCP server.
+    
+    Uses a backward-compatible fallback approach:
+    1. Try --describe command first (new structured method)
+    2. Fall back to help text scraping (old method for compatibility)
+    """
     global plugin_registry
     
     # Discover plugins
@@ -235,31 +404,44 @@ def register_plugin_tools(server: Server):
     for plugin_name, plugin_info in plugin_registry.items():
         cli_path = plugin_info["path"]
         
-        # Get help to extract available commands
-        help_text = get_plugin_help(plugin_name, cli_path)
-        lines = help_text.split('\n')
-        in_commands_section = False
+        # Try --describe first (new method)
+        plugin_spec = get_plugin_describe(plugin_name, cli_path)
         
-        for line in lines:
-            if line.strip().startswith("Available commands:"):
-                in_commands_section = True
-                continue
-            if in_commands_section:
-                # End of commands section if we hit an empty line or Examples
-                if not line.strip() or line.strip().startswith("Examples"):
-                    in_commands_section = False
+        if plugin_spec:
+            # New method: use structured --describe output
+            logger.info(f"Plugin {plugin_name}: Using --describe method for discovery")
+            
+            commands = plugin_spec.get("commands", [])
+            for command_spec in commands:
+                command_name = command_spec.get("name")
+                if not command_name:
+                    logger.warning(f"Plugin {plugin_name}: Skipping command with no name")
                     continue
-                if line.startswith('  '):
-                    parts = line.strip().split()
-                    if parts and parts[0] not in ['usage:', 'options:', 'Available', 'Examples:']:
-                        command = parts[0]
-                        
-                        # Create tool
-                        tool = create_tool_from_plugin(plugin_name, command)
-                        all_tools.append(tool)
-                        
-                        logger.info(f"Created tool: {tool.name}")
-                        metrics["tools_registered"] += 1
+                
+                # Create tool with full spec
+                tool = create_tool_from_plugin(plugin_name, command_name, command_spec)
+                all_tools.append(tool)
+                
+                logger.info(f"Created tool: {tool.name} (with parameter schema)")
+                metrics["tools_registered"] += 1
+        else:
+            # Fallback: use help text scraping (old method)
+            logger.info(f"Plugin {plugin_name}: Using help scraping fallback (--describe not supported)")
+            
+            help_text = get_plugin_help(plugin_name, cli_path)
+            commands = parse_commands_from_help(help_text)
+            
+            if not commands:
+                logger.warning(f"Plugin {plugin_name}: No commands discovered via help scraping")
+                continue
+            
+            for command in commands:
+                # Create tool without spec (empty schema)
+                tool = create_tool_from_plugin(plugin_name, command, None)
+                all_tools.append(tool)
+                
+                logger.info(f"Created tool: {tool.name} (fallback method, no parameter schema)")
+                metrics["tools_registered"] += 1
     
     # Register the list_tools handler
     @server.list_tools()
