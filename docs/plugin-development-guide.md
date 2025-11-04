@@ -735,7 +735,7 @@ def execute_rollback(app_name: str, version: str) -> Dict[str, Any]:
 ## Resources
 
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
-- [FastMCP Documentation](https://github.com/microsoft/fastmcp)
+- [MCP Python SDK Documentation](https://github.com/modelcontextprotocol/python-sdk)
 - [Python argparse Documentation](https://docs.python.org/3/library/argparse.html)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 
