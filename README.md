@@ -428,7 +428,7 @@ This project uses dual licensing:
 ## 🙏 Acknowledgments
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) for the protocol specification
-- [FastMCP](https://github.com/microsoft/fastmcp) for the server framework
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) for the base MCP library
 - The Animus team for the AI framework integration
 - The Letta team for the kernel for AnimusOS
 

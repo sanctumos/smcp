@@ -14,7 +14,7 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 ### ✨ Added
 
 - **Complete MCP Protocol Compliance**: Full implementation of Model Context Protocol specification
-- **FastMCP Integration**: Migrated to Microsoft's FastMCP framework for robust server implementation
+- **Base MCP Library Integration**: Uses official MCP Python SDK with proper SSE transport for bidirectional communication
 - **Comprehensive Test Suite**: 100% test coverage with unit, integration, and E2E tests
 - **Plugin Architecture**: Dynamic plugin discovery and registration system
 - **SSE Transport**: Proper Server-Sent Events implementation for real-time communication
@@ -26,7 +26,7 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 ### 🔧 Changed
 
-- **Server Implementation**: Complete rewrite using FastMCP instead of custom aiohttp implementation
+- **Server Implementation**: Complete rewrite using base MCP library (`mcp.server.Server`) with SSE transport instead of custom aiohttp implementation
 - **Plugin System**: Redesigned plugin architecture with automatic discovery
 - **Testing Infrastructure**: Rebuilt test suite from scratch with proper SSE understanding
 - **Documentation**: Complete rewrite with comprehensive guides and examples
@@ -44,7 +44,8 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 ### 🗑️ Removed
 
 - **Legacy STDIO Protocol**: Removed outdated protocol implementation
-- **Custom SSE Handler**: Replaced with FastMCP's proven implementation
+- **Custom SSE Handler**: Replaced with base MCP library's SSE transport implementation
+- **FastMCP Dependency**: Migrated away from FastMCP due to SSE limitations (see docs/FASTMCP-issue_update.md)
 - **Problematic Tests**: Removed hanging and incompatible test files
 - **Outdated Documentation**: Replaced with comprehensive, user-friendly guides
 
@@ -72,9 +73,9 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 ### 🚀 Performance
 
-- **FastMCP Framework**: Optimized performance with Microsoft's production-ready framework
+- **Base MCP Library**: Uses official MCP Python SDK for optimized performance and protocol compliance
 - **Efficient Plugin Loading**: Automatic discovery and registration
-- **Proper SSE Handling**: No more hanging connections or resource leaks
+- **Proper SSE Handling**: Bidirectional SSE communication with no hanging connections or resource leaks
 - **Concurrent Request Support**: Handles multiple simultaneous requests efficiently
 
 ### 🔒 Security
@@ -122,7 +123,7 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 ## Version History
 
-- **3.0.0** (Current): Complete overhaul with FastMCP, comprehensive testing, and production readiness
+- **3.0.0** (Current): Complete overhaul with base MCP library, comprehensive testing, and production readiness
 - **2.2.0**: SSE-based implementation with basic functionality
 - **2.1.0**: Plugin system and STDIO transport
 - **2.0.0**: Initial MCP server foundation
@@ -131,15 +132,15 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 ### From 2.x to 3.0.0
 
-1. **Update Dependencies**: Install FastMCP and new requirements
-2. **Plugin Updates**: Plugins now use standardized CLI interface
+1. **Update Dependencies**: Install MCP Python SDK and new requirements
+2. **Plugin Updates**: Plugins now use standardized CLI interface with optional `--describe` command
 3. **Configuration**: Update environment variables if using custom paths
 4. **Testing**: Run comprehensive test suite to verify functionality
 
 ### Breaking Changes
 
-- **Server Implementation**: Complete rewrite using FastMCP
-- **Plugin Interface**: Standardized CLI-based plugin system
+- **Server Implementation**: Complete rewrite using base MCP library (`mcp.server.Server`) with SSE transport
+- **Plugin Interface**: Standardized CLI-based plugin system with optional structured introspection
 - **Protocol Handling**: Updated to full MCP specification compliance
 - **Testing Framework**: Complete test suite rebuild
 

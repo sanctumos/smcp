@@ -539,18 +539,22 @@ python smcp.py --host 0.0.0.0 --port 8000
 
 ### Server Configuration
 
-The server can be configured through environment variables or by modifying the server code:
+The server uses the base MCP library with SSE transport. Configuration is handled through environment variables and command-line arguments:
 
 ```python
-# Server configuration
-server = FastMCP(
-    name="animus-letta-mcp",
-    instructions="A plugin-based MCP server for Animus Letta operations",
-    sse_path="/sse",
-    message_path="/messages/",
-    host=os.getenv("MCP_HOST", "0.0.0.0"),
-    port=int(os.getenv("MCP_PORT", "8000"))
-)
+# Server configuration (from smcp.py)
+from mcp.server import Server
+from mcp.server.sse import SseServerTransport
+
+# Create base MCP server
+server = Server(name="animus-letta-mcp", version="1.0.0")
+
+# Create SSE transport
+sse_transport = SseServerTransport("/messages/")
+
+# Server host/port configured via:
+# - Command line: --host, --port
+# - Environment: MCP_HOST, MCP_PORT
 ```
 
 ## Examples
