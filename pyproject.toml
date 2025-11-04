@@ -65,15 +65,7 @@ Repository = "https://github.com/AnimusUNO/smcp"
 Issues = "https://github.com/AnimusUNO/smcp/issues"
 Changelog = "https://github.com/AnimusUNO/smcp/blob/master/CHANGELOG.md"
 
-[project.scripts]
-smcp-server = "smcp:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["smcp*"]
-
-[tool.setuptools.package-data]
-smcp = ["plugins/**/*.py"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -92,7 +84,7 @@ asyncio_mode = "auto"
 timeout = 60
 
 [tool.coverage.run]
-source = ["smcp.py", "smcp"]
+source = ["smcp.py"]
 omit = [
     "*/tests/*",
     "*/test_*",
