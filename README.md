@@ -3,11 +3,11 @@
 [![License: AGPLv3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Docs License: CC BY-SA 4.0](https://img.shields.io/badge/Docs%20License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)]
 [![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%20Compliant-green.svg)](https://modelcontextprotocol.io/)]
-[![Sanctum Core Module](https://img.shields.io/badge/Sanctum-Core%20Module-blue.svg)](https://github.com/sanctumos)
+[![Animus Core Module](https://img.shields.io/badge/Animus-Core%20Module-blue.svg)](https://animus.uno)
 
-**Sanctum Core Module: Model Context Protocol Server**
+**Animus Core Module: Model Context Protocol Server**
 
-SMCP is a powerful, plugin-based Model Context Protocol (MCP) server for the Sanctum Letta AI framework. This server provides seamless integration between AI clients and external tools through a robust plugin architecture. As a Sanctum Core Module, it represents the official, production-ready implementation maintained by the Sanctum team.
+SMCP is a powerful, plugin-based Model Context Protocol (MCP) server for the Animus Letta AI framework. This server provides seamless integration between AI clients and external tools through a robust plugin architecture. As an Animus Core Module, it represents the official, production-ready implementation maintained by the Animus team.
 
 ## 🔄 Recent Updates
 
@@ -50,8 +50,8 @@ SMCP has been completely rewritten to use the base MCP library instead of FastMC
 
 ### Deployment Options
 
-**Option 1: Master Sanctum Installer (Recommended)**
-The master Sanctum installer will automatically deploy SMCP to the correct location within your Sanctum environment with all necessary configurations.
+**Option 1: Master Animus Installer (Recommended)**
+The master Animus installer will automatically deploy SMCP to the correct location within your Animus environment with all necessary configurations.
 
 **Option 2: Standalone Repository**
 SMCP can also function as a standalone repository for development, testing, or custom deployments.
@@ -102,12 +102,12 @@ python smcp.py --host 0.0.0.0 --port 8000
 
 ## 🔧 Configuration
 
-### Master Sanctum Installer Integration
+### Master Animus Installer Integration
 
-When deployed via the master Sanctum installer, SMCP is automatically:
-- Installed to the correct location within your Sanctum environment
+When deployed via the master Animus installer, SMCP is automatically:
+- Installed to the correct location within your Animus environment
 - Configured with appropriate environment variables
-- Integrated with the Sanctum plugin management system
+- Integrated with the Animus plugin management system
 - Set up with proper networking and security configurations
 
 > **Note**: The following configuration options apply to standalone deployments. When using the master installer, these are handled automatically.
@@ -118,20 +118,23 @@ When deployed via the master Sanctum installer, SMCP is automatically:
 |----------|---------|-------------|
 | `MCP_PORT` | `8000` | Port for the MCP server |
 | `MCP_PLUGINS_DIR` | `plugins/` | Directory containing plugins |
-| `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost for security) |
+| `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost-only for security) |
 
 ### Example Configuration
 
 ```bash
-# Default: localhost-only
+# Default: localhost-only (secure)
 python smcp.py
 
 # Custom port
 export MCP_PORT=9000
 python smcp.py
 
-# Localhost-only (default)
+# Localhost-only (explicit)
 python smcp.py --host 127.0.0.1
+
+# Allow external connections (use with caution)
+python smcp.py --allow-external
 
 # Custom plugins directory
 export MCP_PLUGINS_DIR=/path/to/custom/plugins
@@ -140,7 +143,7 @@ python smcp.py
 
 ## 🔌 Plugin Development
 
-> **Note**: When deployed via the master Sanctum installer, plugins are automatically discovered and managed. The following applies to standalone deployments and custom plugin development.
+> **Note**: When deployed via the master Animus installer, plugins are automatically discovered and managed. The following applies to standalone deployments and custom plugin development.
 
 For comprehensive plugin development documentation, see [docs/dev/plugin-development-guide.md](docs/dev/plugin-development-guide.md).
 
@@ -164,7 +167,7 @@ The server supports symbolic links for flexible plugin deployment. You can centr
 
 ```
 # Central plugin repository
-/opt/sanctum/plugins/
+/opt/animus/plugins/
 ├── botfather/
 ├── devops/
 └── custom-plugin/
@@ -373,11 +376,11 @@ curl -X POST http://localhost:8000/messages/ \
 
 ### Logging
 
-Logs are written to stdout and, by default, to `mcp.log` with rotation. Configure behavior via environment variables:
+Logs are written to stdout and, by default, to `logs/mcp_server.log` with rotation. Configure behavior via environment variables:
 
 - `MCP_LOG_LEVEL` (default `INFO`)
 - `MCP_LOG_JSON` (set `true` for JSON logs)
-- `MCP_LOG_FILE` (default `mcp.log`)
+- `MCP_LOG_FILE` (default `logs/mcp_server.log`)
 - `MCP_LOG_ROTATION` (`size`, `time`, or `none`)
 - `MCP_DISABLE_FILE_LOG` (set `true` to disable file logging)
 
@@ -395,7 +398,7 @@ See `docs/api-reference.md` for the full matrix.
 
 ```bash
 # Install development dependencies
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 
 # Run linting
 flake8 smcp/ tests/
@@ -417,7 +420,6 @@ python -m pytest tests/ --cov=smcp --cov-report=html
 ### 🔧 **Configuration & Deployment**
 - **[🚀 Deployment Guide](docs/deployment-guide.md)** - **Production deployment** with systemd, Docker, and reverse proxy
 - **[🔧 Configuration Guide](docs/api-reference.md)** - Complete API documentation and configuration options
-- **[🏗️ MCP Reference Architecture](docs/MCP-Reference-Architecture.md)** - High-level architecture overview
 
 ### 🔗 **Integration & Troubleshooting**
 - **[🔗 Letta MCP Connection Guide](docs/Letta-MCP-Connection-Guide.md)** - Connect Letta clients to SMCP
@@ -425,7 +427,7 @@ python -m pytest tests/ --cov=smcp --cov-report=html
 - **[📊 Monitoring & Health Checks](docs/deployment-guide.md#monitoring-and-logging)** - Production monitoring setup
 
 ### 👨‍💻 **Developer Resources**
-- **[📋 Project Plan](docs/dev/project-plan.md)** - Internal project planning and decisions
+- **[📋 Examples Guide](docs/examples.md)** - **Practical examples** and code samples for all use cases
 
 ## 📄 License
 
@@ -439,18 +441,18 @@ This project uses dual licensing:
 ## 🙏 Acknowledgments
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) for the protocol specification
-- [FastMCP](https://github.com/microsoft/fastmcp) for the server framework
-- The Sanctum team for the AI framework integration
-- The Letta team for the kernel for SanctumOS
+- [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) for the base MCP library
+- The Animus team for the AI framework integration
+- The Letta team for the kernel for AnimusOS
 
 ## 📞 Support
 
 For support, questions, or contributions:
 
 - **Author**: Mark Rizzn Hopkins
-- **Repository**: https://github.com/sanctumos/smcp
-- **Issues**: https://github.com/sanctumos/smcp/issues
+- **Website**: https://animus.uno
+- **X (Twitter)**: https://x.com/animusuno
 
 ---
 
-**Part of the Sanctum Suite** - A comprehensive AI framework for modern applications. 
+**Part of the Animus Suite** - A comprehensive AI framework for modern applications. 

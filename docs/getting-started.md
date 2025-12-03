@@ -1,15 +1,15 @@
 # Getting Started with SMCP
 
-Welcome to SMCP (Sanctum Model Context Protocol Server)! This guide will help you get up and running quickly, whether you're using the master Sanctum installer or running SMCP standalone.
+Welcome to SMCP (Animus Model Context Protocol Server)! This guide will help you get up and running quickly, whether you're using the master Animus installer or running SMCP standalone.
 
 ## 🚀 Quick Start Options
 
-### Option 1: Master Sanctum Installer (Recommended)
-The easiest way to get started is through the master Sanctum installer, which handles all configuration automatically:
+### Option 1: Master Animus Installer (Recommended)
+The easiest way to get started is through the master Animus installer, which handles all configuration automatically:
 
 ```bash
-# Install via master Sanctum installer
-# (This will be documented in the main Sanctum documentation)
+# Install via master Animus installer
+# (This will be documented in the main Animus documentation)
 ```
 
 ### Option 2: Standalone Installation
@@ -17,7 +17,7 @@ For development, testing, or custom deployments, you can run SMCP standalone:
 
 ```bash
 # Clone the repository
-git clone https://github.com/sanctumos/smcp.git
+git clone https://github.com/animusos/smcp.git
 cd smcp
 
 # Create virtual environment
@@ -28,7 +28,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run the server
-python smcp/mcp_server.py
+python smcp.py
 ```
 
 ## 🔧 First-Time Setup
@@ -44,13 +44,13 @@ SMCP comes with sensible defaults, but you can customize:
 
 ```bash
 # Check available options
-python smcp/mcp_server.py --help
+python smcp.py --help
 
 # Run with custom port
-python smcp/mcp_server.py --port 9000
+python smcp.py --port 9000
 
 # Run with custom host binding
-python smcp/mcp_server.py --host 127.0.0.1
+python smcp.py --host 127.0.0.1
 ```
 
 ## 🌐 Accessing Your Server
@@ -141,14 +141,14 @@ asyncio.run(test_connection())
 ```bash
 # Error: Address already in use
 # Solution: Use a different port
-python smcp/mcp_server.py --port 9000
+python smcp.py --port 9000
 ```
 
 ### Permission Denied
 ```bash
 # Error: Permission denied
 # Solution: Check file permissions and run with appropriate user
-chmod +x smcp/mcp_server.py
+chmod +x smcp.py
 ```
 
 ### Plugin Not Found
@@ -156,14 +156,14 @@ chmod +x smcp/mcp_server.py
 # Error: Plugin directory not found
 # Solution: Set custom plugin directory
 export MCP_PLUGINS_DIR=/path/to/your/plugins
-python smcp/mcp_server.py
+python smcp.py
 ```
 
 ### Network Binding Issues
 ```bash
 # Error: Cannot bind to address
 # Solution: Use localhost-only binding
-python smcp/mcp_server.py --host 127.0.0.1
+python smcp.py --host 127.0.0.1
 ```
 
 ## 📚 Next Steps
@@ -178,8 +178,8 @@ Now that you're up and running:
 ## 🆘 Need Help?
 
 - **Documentation**: Check the [main documentation index](../README.md#-documentation)
-- **Issues**: Report problems on [GitHub Issues](https://github.com/sanctumos/smcp/issues)
-- **Community**: Join the Sanctum community discussions
+- **Website**: https://animus.uno
+- **X (Twitter)**: https://x.com/animusuno
 
 ---
 

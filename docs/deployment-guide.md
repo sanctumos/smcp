@@ -26,7 +26,7 @@ sudo chown smcp:smcp /opt/smcp
 ### 2. Install SMCP
 ```bash
 # Clone to system location
-sudo git clone https://github.com/sanctumos/smcp.git /opt/smcp
+sudo git clone https://github.com/animusos/smcp.git /opt/smcp
 cd /opt/smcp
 
 # Install dependencies
@@ -50,7 +50,7 @@ Environment=PATH=/opt/smcp/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=MCP_PORT=8000
 Environment=MCP_HOST=0.0.0.0
 Environment=MCP_PLUGINS_DIR=/opt/smcp/smcp/plugins
-ExecStart=/usr/bin/python smcp/mcp_server.py
+ExecStart=/usr/bin/python smcp.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -109,7 +109,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone SMCP
-RUN git clone https://github.com/sanctumos/smcp.git .
+RUN git clone https://github.com/animusos/smcp.git .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
@@ -125,7 +125,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/messages/ || exit 1
 
 # Run SMCP
-CMD ["python", "smcp/mcp_server.py", "--host", "0.0.0.0"]
+CMD ["python", "smcp.py", "--host", "0.0.0.0"]
 ```
 
 ### 2. Build and Run
@@ -316,7 +316,7 @@ Create `/etc/logrotate.d/smcp`:
 watch -n 5 'systemctl status smcp'
 
 # Monitor logs
-tail -f /var/log/smcp/mcp.log
+tail -f /var/log/smcp/logs/mcp_server.log
 
 # Monitor system resources
 htop
@@ -440,4 +440,4 @@ openssl x509 -in /etc/nginx/ssl/smcp.crt -text -noout | grep "Not After"
 
 ---
 
-**Need help with deployment?** Check the [Troubleshooting Guide](troubleshooting.md) or report issues on [GitHub Issues](https://github.com/sanctumos/smcp/issues).
+**Need help with deployment?** Check the [Troubleshooting Guide](troubleshooting.md) or visit [animus.uno](https://animus.uno) for support.
