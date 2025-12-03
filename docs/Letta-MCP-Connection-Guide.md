@@ -997,4 +997,4 @@ logging.getLogger('letta.services.mcp').setLevel(logging.DEBUG)
 
 This guide provides the complete specifications needed to implement an MCP server that integrates seamlessly with Letta. Follow the SSE endpoint specifications carefully, and use the provided examples as starting points for your implementation.
 
-> **Note**: This is the Sanctum edition of the Letta MCP server. 
+> **Note**: This is the Sanctum edition of the Letta MCP server.

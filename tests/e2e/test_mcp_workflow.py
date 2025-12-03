@@ -116,7 +116,10 @@ class TestMCPWorkflow:
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             yield client
     
+<<<<<<< HEAD
     @pytest.mark.skip(reason="E2E subprocess environment issue returning 400")
+=======
+>>>>>>> animus/master
     async def test_complete_mcp_workflow(self, client: httpx.AsyncClient, base_url: str, server_process):
         """Test complete MCP workflow: connect, initialize, list tools, call tool."""
         
@@ -222,7 +225,10 @@ class TestMCPWorkflow:
             else:
                 pytest.fail(f"MCP workflow failed: {e}")
     
+<<<<<<< HEAD
     @pytest.mark.skip(reason="E2E subprocess environment issue returning 400")
+=======
+>>>>>>> animus/master
     async def test_plugin_tool_execution(self, client: httpx.AsyncClient, base_url: str, server_process):
         """Test execution of plugin tools."""
         

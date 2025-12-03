@@ -450,7 +450,7 @@ class TestSMCPIntegration:
     def smcp_server(self):
         """Start SMCP server for testing."""
         process = subprocess.Popen([
-            "python", "smcp/mcp_server.py", "--port", "8001"
+            "python", "smcp.py", "--port", "8001"
         ])
         
         # Wait for server to start
@@ -726,4 +726,4 @@ For additional examples and use cases:
 
 ---
 
-**Have a specific use case?** Check our [GitHub Issues](https://github.com/sanctumos/smcp/issues) or create a new one with your requirements!
+**Have a specific use case?** Visit [animus.uno](https://animus.uno) or follow [@animusuno](https://x.com/animusuno) for support!

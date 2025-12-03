@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test runner script for Sanctum Letta MCP Server.
+Test runner script for Animus Letta MCP Server.
 
 This script provides easy access to run different types of tests:
 - Unit tests
@@ -39,10 +39,10 @@ def run_command(cmd, description):
     
     try:
         result = subprocess.run(cmd, check=True, capture_output=False)
-        print(f"\n✅ {description} completed successfully!")
+        print(f"\n[SUCCESS] {description} completed successfully!")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ {description} failed with exit code {e.returncode}")
+        print(f"\nX {description} failed with exit code {e.returncode}")
         return False
 
 
@@ -73,8 +73,11 @@ def main():
     if args.verbose:
         base_cmd.append("-v")
     
-    if not args.no_cov and args.type in ["all", "coverage"]:
-        base_cmd.extend(["--cov=mcp", "--cov-report=term-missing"])
+    if args.no_cov:
+        # Disable coverage entirely when --no-cov is specified
+        base_cmd.extend(["--no-cov", "--cov-fail-under=0"])
+    elif args.type in ["all", "coverage"]:
+        base_cmd.extend(["--cov=smcp", "--cov-report=term-missing"])
     
     success = True
     
@@ -109,10 +112,10 @@ def main():
         )
     
     if success:
-        print("\n🎉 All tests passed!")
+        print("\n[SUCCESS] All tests passed!")
         sys.exit(0)
     else:
-        print("\n💥 Some tests failed!")
+        print("\n[FAILED] Some tests failed!")
         sys.exit(1)
 
 
