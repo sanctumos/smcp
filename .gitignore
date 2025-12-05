@@ -46,3 +46,10 @@ docs/dev/
 dist/
 build/
 tmp/
+
+# Scratch/testing
+scratch/
+plugins/imap/__init__.py
+plugins/imap/cli.py
+plugins/imap/imap_client.py
+plugins/imap/README.md
