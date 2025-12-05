@@ -268,6 +268,11 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
             if isinstance(value, bool):
                 if value:
                     cmd_args.append(f"--{arg_name}")
+            elif isinstance(value, list):
+                # For arrays/lists, pass each element as a separate argument
+                # This works with argparse nargs="+" or nargs="*"
+                for item in value:
+                    cmd_args.extend([f"--{arg_name}", str(item)])
             else:
                 cmd_args.extend([f"--{arg_name}", str(value)])
         

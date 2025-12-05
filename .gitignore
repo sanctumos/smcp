@@ -53,3 +53,7 @@ plugins/imap/__init__.py
 plugins/imap/cli.py
 plugins/imap/imap_client.py
 plugins/imap/README.md
+plugins/smtp/__init__.py
+plugins/smtp/cli.py
+plugins/smtp/README.md
+plugins/smtp/smtp_client.py
