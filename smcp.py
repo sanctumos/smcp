@@ -238,10 +238,18 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
         # Parse tool name to get plugin and command
-        if '.' not in tool_name:
-            return f"Invalid tool name format: {tool_name}. Expected 'plugin.command'"
-        
-        plugin_name, command = tool_name.split('.', 1)
+        # Tool names use double underscore separator: "plugin__command"
+        # Support both double underscore (new) and dot (legacy) for backward compatibility
+        if '__' in tool_name:
+            parts = tool_name.split('__', 1)  # Split on double underscore
+            if len(parts) != 2:
+                return f"Invalid tool name format: {tool_name}. Expected 'plugin__command'"
+            plugin_name, command = parts
+        elif '.' in tool_name:
+            # Legacy dot format for backward compatibility
+            plugin_name, command = tool_name.split('.', 1)
+        else:
+            return f"Invalid tool name format: {tool_name}. Expected 'plugin__command' or 'plugin.command'"
         
         if plugin_name not in plugin_registry:
             return f"Plugin '{plugin_name}' not found"
@@ -253,30 +261,133 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         cmd_args = [sys.executable, cli_path, command]
         
         # Add arguments
+        # Convert underscores to dashes for command-line arguments (standard convention)
         for key, value in arguments.items():
+            # Convert parameter name (use_ssl) to CLI argument (--use-ssl)
+            arg_name = key.replace('_', '-')
             if isinstance(value, bool):
                 if value:
-                    cmd_args.append(f"--{key}")
+                    cmd_args.append(f"--{arg_name}")
             else:
-                cmd_args.extend([f"--{key}", str(value)])
+                cmd_args.extend([f"--{arg_name}", str(value)])
         
-        logger.info(f"Executing plugin command: {' '.join(cmd_args)}")
+        # Suppress verbose logging in STDIO mode
+        if logger.level <= logging.INFO:
+            logger.info(f"Executing plugin command: {' '.join(cmd_args)}")
         
-        # Execute the command
-        process = await asyncio.create_subprocess_exec(
-            *cmd_args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        # Execute the command with timeout
+        # Default timeout: 5 minutes (300 seconds) for long-running operations like IMAP connections
+        # This prevents indefinite hangs while allowing reasonable time for network operations
+        timeout_seconds = 300
         
-        stdout, stderr = await process.communicate()
+        process = None
+        try:
+            # Use unbuffered output to prevent hanging on stdout/stderr
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            # Also set unbuffered for subprocess Python
+            env['PYTHONIOENCODING'] = 'utf-8'
+            
+            # Use PIPE for both to see what's happening
+            # Explicitly set stdin to DEVNULL to prevent subprocess from waiting for input
+            # We'll read them concurrently to avoid deadlock
+            process = await asyncio.create_subprocess_exec(
+                *cmd_args,
+                stdin=asyncio.subprocess.DEVNULL,  # Don't inherit stdin - prevent hanging on input
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            
+            # Read both streams concurrently with a single timeout for the whole operation
+            async def read_output():
+                """Read both streams concurrently."""
+                stdout_data = b''
+                stderr_data = b''
+                
+                async def read_stdout():
+                    nonlocal stdout_data
+                    if process.stdout:
+                        while True:
+                            chunk = await process.stdout.read(8192)
+                            if not chunk:
+                                break
+                            stdout_data += chunk
+                
+                async def read_stderr():
+                    nonlocal stderr_data
+                    if process.stderr:
+                        while True:
+                            chunk = await process.stderr.read(8192)
+                            if not chunk:
+                                break
+                            stderr_data += chunk
+                
+                # Read both streams concurrently
+                await asyncio.gather(read_stdout(), read_stderr())
+                
+                # Wait for process to finish
+                await process.wait()
+                
+                return stdout_data, stderr_data
+            
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    read_output(),
+                    timeout=timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                # Process is hanging - kill it and capture what we have
+                if process.returncode is None:
+                    process.kill()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        pass
+                # Try to get any partial output
+                if process.stdout:
+                    try:
+                        partial_stdout = await asyncio.wait_for(process.stdout.read(), timeout=0.1)
+                        if partial_stdout:
+                            stderr_text = stderr.decode('utf-8', errors='replace') if stderr else ''
+                            error_msg = f"Plugin command timed out. Partial output: {partial_stdout.decode('utf-8', errors='replace')[:200]}"
+                            if stderr_text:
+                                error_msg += f" Stderr: {stderr_text[:200]}"
+                            metrics["tool_calls_error"] += 1
+                            return error_msg
+                    except:
+                        pass
+                raise  # Re-raise to be caught by outer handler
+        except asyncio.TimeoutError:
+            # Kill the process if it times out
+            if process:
+                try:
+                    process.kill()
+                    await process.wait()
+                except:
+                    pass
+            error_msg = f"Plugin command timed out after {timeout_seconds} seconds"
+            metrics["tool_calls_error"] += 1
+            return error_msg
         
         if process.returncode == 0:
             result = stdout.decode().strip()
             metrics["tool_calls_success"] += 1
             return result
         else:
-            error_msg = stderr.decode().strip()
+            # Plugin should output error as JSON to stdout, but if not, use returncode
+            if stdout:
+                try:
+                    # Try to parse error from stdout JSON
+                    error_data = json.loads(stdout.decode().strip())
+                    if "error" in error_data:
+                        error_msg = error_data["error"]
+                    else:
+                        error_msg = stdout.decode().strip()
+                except:
+                    error_msg = stdout.decode().strip() or f"Plugin exited with code {process.returncode}"
+            else:
+                error_msg = f"Plugin exited with code {process.returncode} (no output)"
             metrics["tool_calls_error"] += 1
             return f"Error: {error_msg}"
             
@@ -357,8 +468,15 @@ def create_tool_from_plugin(plugin_name: str, command: str, command_spec: Dict[s
         command: Name of the command
         command_spec: Optional command specification from --describe output
             If provided, will extract description and parameters for schema
+    
+    Note: Tool names use double underscore separator (e.g., "plugin__command") instead of dots
+    to comply with Claude Desktop's validation pattern: ^[a-zA-Z0-9_-]{1,64}$
+    Double underscore is unlikely to appear in plugin or command names.
     """
-    tool_name = f"{plugin_name}.{command}"
+    # Use double underscore instead of dot for Claude Desktop compatibility
+    # Claude Desktop requires: ^[a-zA-Z0-9_-]{1,64}$
+    # Double underscore is safe because it's unlikely in plugin/command names
+    tool_name = f"{plugin_name}__{command}"
     
     # Extract description from spec if available
     if command_spec:
@@ -418,6 +536,12 @@ def register_plugin_tools(server: Server):
                     logger.warning(f"Plugin {plugin_name}: Skipping command with no name")
                     continue
                 
+                # Skip redundant connect/disconnect commands (all commands auto-connect)
+                if command_name in ["connect", "disconnect"]:
+                    if logger.level <= logging.INFO:
+                        logger.info(f"Plugin {plugin_name}: Skipping redundant '{command_name}' command (use auto-connect instead)")
+                    continue
+                
                 # Create tool with full spec
                 tool = create_tool_from_plugin(plugin_name, command_name, command_spec)
                 all_tools.append(tool)
@@ -447,21 +571,27 @@ def register_plugin_tools(server: Server):
     @server.list_tools()
     async def list_tools_handler():
         """Return the list of available tools."""
-        logger.info(f"Returning {len(all_tools)} tools: {[tool.name for tool in all_tools]}")
-        # Log the actual tool schemas for debugging
-        for tool in all_tools:
-            logger.info(f"Tool {tool.name} schema: {tool.inputSchema}")
+        # Suppress verbose logging in STDIO mode to avoid blocking
+        # Just return the tools immediately
         return all_tools
     
     # Register the call_tool handler
     @server.call_tool()
     async def call_tool_handler(tool_name: str, arguments: dict):
         """Handle tool calls."""
-        logger.info(f"Tool call: {tool_name} with args: {arguments}")
+        # Suppress verbose logging in STDIO mode
+        if logger.level <= logging.INFO:
+            logger.info(f"Tool call: {tool_name} with args: {arguments}")
         metrics["tool_calls_total"] += 1
-        result = await execute_plugin_tool(tool_name, arguments)
-        logger.info(f"Tool result: {result}")
-        return [TextContent(type="text", text=str(result))]
+        try:
+            result = await execute_plugin_tool(tool_name, arguments)
+            if logger.level <= logging.INFO:
+                logger.info(f"Tool result: {result[:200]}...")  # Truncate long results
+            return [TextContent(type="text", text=str(result))]
+        except Exception as e:
+            error_msg = f"Tool execution failed: {str(e)}"
+            metrics["tool_calls_error"] += 1
+            return [TextContent(type="text", text=error_msg)]
 
 
 def create_server(host: str, port: int) -> Server:
