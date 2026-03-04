@@ -119,7 +119,7 @@ When deployed via the master Animus installer, SMCP is automatically:
 | `MCP_PORT` | `8000` | Port for the MCP server |
 | `MCP_PLUGINS_DIR` | `plugins/` | Directory containing plugins |
 | `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost-only for security) |
-| `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup and exposes them to plugin subprocesses. Example: `http://127.0.0.1:8284` |
+| `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env` (same file Letta uses); default URL is `http://127.0.0.1:8284`. |
 | `LETTA_SERVER_PASSWORD` | — | Bearer token for Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
 | `LETTA_AGENT_ID` | — | Optional. If set, only this agent's env vars are loaded; otherwise all agents' vars are merged. |
 
