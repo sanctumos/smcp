@@ -30,6 +30,8 @@ import os
 import subprocess
 import sys
 import time
+import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, List, Sequence
@@ -91,6 +93,72 @@ def setup_logging():
     return logging.getLogger(__name__)
 
 logger = setup_logging()
+
+
+def load_letta_env_vars() -> None:
+    """
+    On startup, optionally fetch agent environment variables (secrets) from the Letta API
+    and set them in this process's environment. Plugin subprocesses will then inherit them.
+
+    Set LETTA_SERVER_URL (e.g. http://127.0.0.1:8284) and LETTA_SERVER_PASSWORD (Bearer token).
+    Optionally set LETTA_AGENT_ID to load only that agent's vars; otherwise all agents' vars
+    are merged (later agent wins on key collision).
+    """
+    base_url = (os.getenv("LETTA_SERVER_URL") or "").strip().rstrip("/")
+    password = (os.getenv("LETTA_SERVER_PASSWORD") or os.getenv("LETTA_API_KEY") or "").strip()
+    agent_id = (os.getenv("LETTA_AGENT_ID") or "").strip() or None
+
+    if not base_url or not password:
+        return
+
+    merged: Dict[str, str] = {}
+    try:
+        if agent_id:
+            url = f"{base_url}/v1/agents/{agent_id}?include=agent.secrets"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Authorization": f"Bearer {password}",
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+            agents = [data] if isinstance(data, dict) and data.get("id") else []
+        else:
+            url = f"{base_url}/v1/agents?limit=100&include=agent.secrets"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    "Authorization": f"Bearer {password}",
+                    "Accept": "application/json",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                agents = json.loads(resp.read().decode())
+        if not isinstance(agents, list):
+            agents = []
+
+        for agent in agents:
+            for env_list_name in ("tool_exec_environment_variables", "secrets"):
+                env_list = agent.get(env_list_name)
+                if not isinstance(env_list, list):
+                    continue
+                for item in env_list:
+                    if isinstance(item, dict) and "key" in item:
+                        key = (item.get("key") or "").strip()
+                        value = item.get("value")
+                        if key:
+                            merged[key] = value if value is not None else ""
+
+        if merged:
+            os.environ.update(merged)
+            logger.info(f"Loaded {len(merged)} env var(s) from Letta: {list(merged.keys())}")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        logger.warning(f"Letta env vars: HTTP {e.code} - {body[:200]}")
+    except Exception as e:
+        logger.warning(f"Letta env vars: {e}")
 
 
 def discover_plugins() -> Dict[str, Dict[str, Any]]:
@@ -646,8 +714,9 @@ Examples:
 
 async def async_main():
     """Main entry point."""
+    load_letta_env_vars()
     args = parse_arguments()
-    
+
     # Determine host binding
     if args.allow_external:
         host = "0.0.0.0"
