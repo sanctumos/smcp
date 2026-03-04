@@ -7,6 +7,7 @@ import json
 import os
 import pytest
 import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -19,6 +20,46 @@ _smcp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_smcp)
 
 load_letta_env_vars = _smcp.load_letta_env_vars
+_load_letta_dotenv = _smcp._load_letta_dotenv
+
+
+@pytest.mark.unit
+class TestLoadLettaDotenv:
+    """Test loading LETTA_* from ~/.letta/.env when not already in environment."""
+
+    def test_loads_from_dotenv_and_sets_default_url(self):
+        """When ~/.letta/.env has LETTA_SERVER_PASSWORD only, URL defaults to 127.0.0.1:8284."""
+        with tempfile.TemporaryDirectory() as d:
+            env_dir = Path(d) / ".letta"
+            env_dir.mkdir()
+            (env_dir / ".env").write_text("export LETTA_SERVER_PASSWORD=token123\n")
+            with patch.dict(os.environ, {"HOME": d}, clear=False):
+                for k in ("LETTA_SERVER_URL", "LETTA_SERVER_PASSWORD", "LETTA_API_KEY"):
+                    os.environ.pop(k, None)
+                _load_letta_dotenv()
+                assert os.environ.get("LETTA_SERVER_PASSWORD") == "token123"
+                assert os.environ.get("LETTA_SERVER_URL") == "http://127.0.0.1:8284"
+
+    def test_does_not_overwrite_existing_env(self):
+        """Existing LETTA_SERVER_URL and LETTA_SERVER_PASSWORD are not overwritten by file."""
+        with tempfile.TemporaryDirectory() as d:
+            env_dir = Path(d) / ".letta"
+            env_dir.mkdir()
+            (env_dir / ".env").write_text("export LETTA_SERVER_PASSWORD=fromfile\nexport LETTA_SERVER_URL=http://other:9999\n")
+            with patch.dict(os.environ, {"HOME": d, "LETTA_SERVER_PASSWORD": "existing", "LETTA_SERVER_URL": "http://existing:8284"}, clear=False):
+                _load_letta_dotenv()
+                assert os.environ.get("LETTA_SERVER_PASSWORD") == "existing"
+                assert os.environ.get("LETTA_SERVER_URL") == "http://existing:8284"
+
+    def test_skips_when_file_missing(self):
+        """When ~/.letta/.env does not exist, no error and env unchanged."""
+        with tempfile.TemporaryDirectory() as d:
+            # no .letta/.env created
+            with patch.dict(os.environ, {"HOME": d}, clear=False):
+                for k in ("LETTA_SERVER_URL", "LETTA_SERVER_PASSWORD"):
+                    os.environ.pop(k, None)
+                _load_letta_dotenv()
+                assert os.environ.get("LETTA_SERVER_PASSWORD") is None or os.environ.get("LETTA_SERVER_PASSWORD") == ""
 
 
 @pytest.mark.unit
@@ -27,28 +68,30 @@ class TestLoadLettaEnvVarsNoOp:
 
     def test_no_op_when_url_unset(self):
         """When LETTA_SERVER_URL is unset, no HTTP request is made."""
-        with patch.dict(os.environ, {"LETTA_SERVER_PASSWORD": "secret"}, clear=False):
-            if "LETTA_SERVER_URL" in os.environ:
-                del os.environ["LETTA_SERVER_URL"]
-            with patch("urllib.request.urlopen") as mock_urlopen:
-                load_letta_env_vars()
-                mock_urlopen.assert_not_called()
+        with tempfile.TemporaryDirectory() as d:
+            with patch.dict(os.environ, {"HOME": d, "LETTA_SERVER_PASSWORD": "secret"}, clear=False):
+                os.environ.pop("LETTA_SERVER_URL", None)
+                with patch("urllib.request.urlopen") as mock_urlopen:
+                    load_letta_env_vars()
+                    mock_urlopen.assert_not_called()
 
     def test_no_op_when_password_unset(self):
         """When LETTA_SERVER_PASSWORD (and LETTA_API_KEY) are unset, no HTTP request."""
-        with patch.dict(os.environ, {"LETTA_SERVER_URL": "http://127.0.0.1:8284"}, clear=False):
-            for key in ("LETTA_SERVER_PASSWORD", "LETTA_API_KEY"):
-                os.environ.pop(key, None)
-            with patch("urllib.request.urlopen") as mock_urlopen:
-                load_letta_env_vars()
-                mock_urlopen.assert_not_called()
+        with tempfile.TemporaryDirectory() as d:
+            with patch.dict(os.environ, {"HOME": d, "LETTA_SERVER_URL": "http://127.0.0.1:8284"}, clear=False):
+                for key in ("LETTA_SERVER_PASSWORD", "LETTA_API_KEY"):
+                    os.environ.pop(key, None)
+                with patch("urllib.request.urlopen") as mock_urlopen:
+                    load_letta_env_vars()
+                    mock_urlopen.assert_not_called()
 
     def test_no_op_when_url_empty_after_strip(self):
         """When LETTA_SERVER_URL is blank, no request."""
-        with patch.dict(os.environ, {"LETTA_SERVER_URL": "  ", "LETTA_SERVER_PASSWORD": "x"}, clear=False):
-            with patch("urllib.request.urlopen") as mock_urlopen:
-                load_letta_env_vars()
-                mock_urlopen.assert_not_called()
+        with tempfile.TemporaryDirectory() as d:
+            with patch.dict(os.environ, {"HOME": d, "LETTA_SERVER_URL": "  ", "LETTA_SERVER_PASSWORD": "x"}, clear=False):
+                with patch("urllib.request.urlopen") as mock_urlopen:
+                    load_letta_env_vars()
+                    mock_urlopen.assert_not_called()
 
 
 @pytest.mark.unit

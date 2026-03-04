@@ -95,15 +95,54 @@ def setup_logging():
 logger = setup_logging()
 
 
+def _load_letta_dotenv() -> None:
+    """
+    If LETTA_SERVER_URL or LETTA_SERVER_PASSWORD are not already set, try to load them
+    from ~/.letta/.env (same file Letta uses on the server). Sets default LETTA_SERVER_URL
+    to http://127.0.0.1:8284 when we have password but no URL.
+    """
+    want = {"LETTA_SERVER_URL", "LETTA_SERVER_PASSWORD", "LETTA_API_KEY"}
+    if all(os.getenv(k) for k in ("LETTA_SERVER_URL", "LETTA_SERVER_PASSWORD")):
+        return
+    if os.getenv("LETTA_SERVER_PASSWORD") or os.getenv("LETTA_API_KEY"):
+        if os.getenv("LETTA_SERVER_URL"):
+            return
+    env_file = Path(os.path.expanduser("~")) / ".letta" / ".env"
+    if not env_file.is_file():
+        return
+    try:
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if not line.startswith("export "):
+                continue
+            rest = line[7:].strip()
+            if "=" not in rest:
+                continue
+            key, _, value = rest.partition("=")
+            key = key.strip()
+            if key not in want or key in os.environ:
+                continue
+            value = value.strip().strip('"').strip("'")
+            os.environ[key] = value
+        if (os.getenv("LETTA_SERVER_PASSWORD") or os.getenv("LETTA_API_KEY")) and not os.getenv("LETTA_SERVER_URL"):
+            os.environ["LETTA_SERVER_URL"] = "http://127.0.0.1:8284"
+    except Exception as e:
+        logger.debug(f"Could not load ~/.letta/.env: {e}")
+
+
 def load_letta_env_vars() -> None:
     """
     On startup, optionally fetch agent environment variables (secrets) from the Letta API
     and set them in this process's environment. Plugin subprocesses will then inherit them.
 
-    Set LETTA_SERVER_URL (e.g. http://127.0.0.1:8284) and LETTA_SERVER_PASSWORD (Bearer token).
+    Uses LETTA_SERVER_URL and LETTA_SERVER_PASSWORD (or LETTA_API_KEY). If not set in the
+    environment, tries ~/.letta/.env (same file Letta uses). Default URL is http://127.0.0.1:8284.
     Optionally set LETTA_AGENT_ID to load only that agent's vars; otherwise all agents' vars
     are merged (later agent wins on key collision).
     """
+    _load_letta_dotenv()
     base_url = (os.getenv("LETTA_SERVER_URL") or "").strip().rstrip("/")
     password = (os.getenv("LETTA_SERVER_PASSWORD") or os.getenv("LETTA_API_KEY") or "").strip()
     agent_id = (os.getenv("LETTA_AGENT_ID") or "").strip() or None
