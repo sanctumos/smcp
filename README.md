@@ -32,6 +32,14 @@ SMCP has been completely rewritten to use the base MCP library instead of FastMC
 - **Health Monitoring**: Built-in health checks and status reporting
 - **Production Ready**: Comprehensive error handling and logging
 
+## 🔧 Development branch (`dev`)
+
+Day-to-day work and **experimental site-specific plugins** (under `plugins/`) should land on **`dev`**, not necessarily on **`master`**. Keep **`master`** aligned with what you consider stable for public / production SMCP core; merge or cherry-pick from `dev` when ready.
+
+```bash
+git fetch origin && git checkout dev && git pull origin dev
+```
+
 ## 📖 **Ready to Get Started?**
 
 **New to SMCP?** Start with our comprehensive documentation:
