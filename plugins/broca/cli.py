@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Broca SMCP plugin — wraps Broca core CLIs (queue, users, conversations, settings, btool).
+Broca SMCP plugin — wraps Broca core CLIs (queue, users, conversations, settings, btool, outbound).
 
 Environment:
   BROCA_ROOT   — cwd for CLI (agent instance; contains sanctum.db). Default: getcwd().
@@ -22,8 +22,8 @@ from typing import Any
 PLUGIN_SPEC: dict[str, Any] = {
     "plugin": {
         "name": "broca",
-        "version": "0.1.0",
-        "description": "Administer a Broca instance via official CLIs (queue, users, conversations, settings, telegram bot ignore list).",
+        "version": "0.2.0",
+        "description": "Administer a Broca instance via official CLIs (queue, users, conversations, settings, telegram ignore list, outbound send).",
     },
     "commands": [
         {
@@ -189,6 +189,43 @@ PLUGIN_SPEC: dict[str, Any] = {
             "name": "settings_reload",
             "description": "Touch settings.json to trigger Broca hot-reload.",
             "parameters": [],
+        },
+        {
+            "name": "send_outbound",
+            "description": "Send outbound message to a user on a platform (v1: telegram). Requires ENABLE_OUTBOUND_TOOL=true on the Broca instance.",
+            "parameters": [
+                {
+                    "name": "letta_user_id",
+                    "type": "number",
+                    "description": "letta_users.id",
+                    "required": True,
+                },
+                {
+                    "name": "platform",
+                    "type": "string",
+                    "description": "Platform name, e.g. telegram",
+                    "required": True,
+                },
+                {
+                    "name": "message",
+                    "type": "string",
+                    "description": "Message body (markdown ok for telegram)",
+                    "required": True,
+                },
+                {
+                    "name": "dry_run",
+                    "type": "string",
+                    "description": "yes = validate only; no = insert audit row and send",
+                    "required": False,
+                    "default": "no",
+                },
+                {
+                    "name": "idempotency_key",
+                    "type": "string",
+                    "description": "Optional correlation key (reserved for future dedup)",
+                    "required": False,
+                },
+            ],
         },
         {
             "name": "telegram_ignore_list",
@@ -414,6 +451,34 @@ def cmd_settings_reload(_args: argparse.Namespace) -> None:
     _emit({"ok": r.get("ok", False), "broca": r}, 0 if r.get("ok") else 1)
 
 
+def cmd_send_outbound(args: argparse.Namespace) -> None:
+    dry = (getattr(args, "dry_run", None) or "no").strip().lower()
+    if dry not in ("yes", "no"):
+        dry = "no"
+    argv = [
+        "send",
+        "--letta-user-id",
+        str(int(args.letta_user_id)),
+        "--platform",
+        str(args.platform),
+        "--message",
+        str(args.message),
+        "--dry-run",
+        dry,
+    ]
+    if getattr(args, "idempotency_key", None):
+        argv.extend(["--idempotency-key", str(args.idempotency_key)])
+    r = _run("cli.outbound", argv, timeout=120)
+    payload = r.get("json") if isinstance(r.get("json"), dict) else {}
+    if not payload and (r.get("stdout") or "").strip():
+        try:
+            payload = json.loads(r["stdout"].strip())
+        except json.JSONDecodeError:
+            payload = {}
+    success = bool(r.get("ok")) and bool(payload.get("success"))
+    _emit({"ok": success, "data": payload, "broca": r}, 0 if success else 1)
+
+
 def cmd_telegram_ignore_list(_args: argparse.Namespace) -> None:
     r = _run("cli.btool", ["list"], timeout=60)
     _emit({"ok": r.get("ok", False), "stdout": r.get("stdout"), "stderr": r.get("stderr")}, 0 if r.get("ok") else 1)
@@ -482,6 +547,13 @@ def main() -> None:
 
     sub.add_parser("settings_reload")
 
+    p = sub.add_parser("send_outbound")
+    p.add_argument("--letta-user-id", type=int, required=True)
+    p.add_argument("--platform", required=True)
+    p.add_argument("--message", required=True)
+    p.add_argument("--dry-run", choices=["yes", "no"], default="no")
+    p.add_argument("--idempotency-key", default=None, dest="idempotency_key")
+
     sub.add_parser("telegram_ignore_list")
 
     p = sub.add_parser("telegram_ignore_add")
@@ -506,6 +578,7 @@ def main() -> None:
         "settings_set_refresh": cmd_settings_set_refresh,
         "settings_set_retries": cmd_settings_set_retries,
         "settings_reload": cmd_settings_reload,
+        "send_outbound": cmd_send_outbound,
         "telegram_ignore_list": cmd_telegram_ignore_list,
         "telegram_ignore_add": cmd_telegram_ignore_add,
         "telegram_ignore_remove": cmd_telegram_ignore_remove,
