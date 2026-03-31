@@ -22,34 +22,13 @@ curl -X POST http://localhost:8000/messages/ \
 
 ## 🔌 Plugin Examples
 
-### BotFather Plugin Usage
+### Bundled demo plugins (`demo_math`, `demo_text`)
 ```bash
-# Get bot information
-python smcp/plugins/botfather/cli.py get-me
+python smcp/plugins/demo_math/cli.py --describe
+python smcp/plugins/demo_math/cli.py calculate --operation multiply --a 6 --b 7
 
-# Send message
-python smcp/plugins/botfather/cli.py send-message \
-  --chat_id "123456789" \
-  --text "Hello from SMCP!"
-
-# Get updates
-python smcp/plugins/botfather/cli.py get-updates
-```
-
-### DevOps Plugin Usage
-```bash
-# Check system status
-python smcp/plugins/devops/cli.py system-status
-
-# Deploy application
-python smcp/plugins/devops/cli.py deploy \
-  --app "my-app" \
-  --environment "production"
-
-# Monitor resources
-python smcp/plugins/devops/cli.py monitor \
-  --metric "cpu" \
-  --duration "1h"
+python smcp/plugins/demo_text/cli.py slugify --title "Hello World Example"
+python smcp/plugins/demo_text/cli.py hash_preview --text "deterministic tool output"
 ```
 
 ## 🌐 Client Integration Examples
