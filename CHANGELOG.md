@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- **`demo_math`** and **`demo_text`** bundled plugins: real behavior + `--describe` JSON for MCP tool schemas (replacing stub `botfather` / `devops`).
+
+### Removed
+
+- Stub **`botfather`** and **`devops`** plugin folders (they returned placeholder JSON only).
+
 ### Changed
 
 - **Broca MCP plugin** (`broca__*` tools) **removed from this repository**. It ships with **[sanctumos/broca](https://github.com/sanctumos/broca)** under `smcp/broca/`. Set `MCP_PLUGINS_DIR` to that repo’s `smcp/` directory (or symlink `broca` into your existing plugins root). See `plugins/README.md`.

@@ -179,14 +179,14 @@ The server supports symbolic links for flexible plugin deployment. You can centr
 ```
 # Central plugin repository
 /opt/animus/plugins/
-├── botfather/
-├── devops/
+├── demo_math/
+├── demo_text/
 └── custom-plugin/
 
 # MCP server plugin directory with symlinks
 plugins/
-├── botfather -> /opt/sanctum/plugins/botfather
-├── devops -> /opt/sanctum/plugins/devops
+├── demo_math -> /opt/sanctum/plugins/demo_math
+├── demo_text -> /opt/sanctum/plugins/demo_text
 └── custom-plugin -> /opt/sanctum/plugins/custom-plugin
 ```
 
@@ -278,10 +278,10 @@ python smcp.py
 4. **JSON Output**: Return structured JSON for easy parsing
 5. **Documentation**: Include help text for all commands and parameters
 
-### Available Plugin Examples
+### Bundled demo plugins (working examples)
 
-- **botfather**: Telegram Bot API integration
-- **devops**: Deployment and infrastructure management
+- **demo_math**: `calculate`, `format_bytes`, `coin_flip` — typed tools, JSON out, **`--describe`** for MCP schemas (no network).
+- **demo_text**: `echo`, `word_count`, `slugify`, `hash_preview` — string utilities agents can chain in one session.
 
 ## 🔗 MCP Protocol Integration
 

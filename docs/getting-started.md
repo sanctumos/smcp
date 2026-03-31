@@ -87,18 +87,18 @@ Expected response:
 ## 🔌 Your First Plugin
 
 ### Built-in Plugins
-SMCP comes with example plugins to get you started:
+SMCP ships small **working** demos (structured JSON + `--describe` for tool schemas):
 
-- **botfather**: Telegram Bot API integration
-- **devops**: Deployment and infrastructure management
+- **demo_math**: arithmetic, byte formatting, coin flip
+- **demo_text**: echo, word count, slugify, short hash preview
 
 ### Testing a Plugin
 ```bash
-# Test the botfather plugin
-python smcp/plugins/botfather/cli.py --help
+python smcp/plugins/demo_math/cli.py --describe
+python smcp/plugins/demo_math/cli.py calculate --operation add --a 2 --b 3
 
-# Test the devops plugin
-python smcp/plugins/devops/cli.py --help
+python smcp/plugins/demo_text/cli.py --describe
+python smcp/plugins/demo_text/cli.py word_count --text "hello world"
 ```
 
 ## 🔗 Connecting Clients
