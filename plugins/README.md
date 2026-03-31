@@ -1,8 +1,13 @@
-# Optional SMCP plugins (this repository)
+# SMCP plugins (this repository)
 
-Third-party and site-specific plugins may live here. **`MCP_PLUGINS_DIR`** defaults to this directory when unset.
+**`MCP_PLUGINS_DIR`** defaults here when unset.
 
-**Broca administration tools (`broca__`*)** ship with **Broca**, not with this repo: use the `smcp/` directory in [sanctumos/broca](https://github.com/sanctumos/broca) and set:
+| Folder | Purpose |
+|--------|---------|
+| **`demo_math/`** | Bundled demo: `calculate`, `format_bytes`, `coin_flip` — run `python cli.py --describe`. |
+| **`demo_text/`** | Bundled demo: `echo`, `word_count`, `slugify`, `hash_preview`. |
+
+**Broca** admin tools (`broca__*`) ship in the [sanctumos/broca](https://github.com/sanctumos/broca) repo (`smcp/broca/`). Point `MCP_PLUGINS_DIR` at a directory that includes both demos and Broca if you need both (e.g. symlinks).
 
 ```bash
 export MCP_PLUGINS_DIR=/path/to/broca/checkout/smcp
