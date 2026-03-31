@@ -35,9 +35,9 @@ ENV/
 
 # Testing
 .pytest_cache/
-.coverage*
+.coverage
+.coverage.*
 htmlcov/
-tests/
 
 # Developer Documentation
 docs/dev/

@@ -471,29 +471,29 @@ class TestParameterSpecToJsonSchema:
 class TestToolCreation:
     """Test tool creation functionality."""
     
-    def test_create_tool_from_plugin_click_button(self):
-        """Test creating click-button tool without spec (tool names use __ for MCP compatibility)."""
-        tool = create_tool_from_plugin("botfather", "click-button")
-        
-        assert tool.name == "botfather__click-button"
-        assert "click-button" in tool.description
+    def test_create_tool_from_plugin_calculate(self):
+        """Test creating calculate tool without spec (tool names use __ for MCP compatibility)."""
+        tool = create_tool_from_plugin("demo_math", "calculate")
+
+        assert tool.name == "demo_math__calculate"
+        assert "calculate" in tool.description
         assert tool.inputSchema["type"] == "object"
         assert tool.inputSchema["properties"] == {}
-    
-    def test_create_tool_from_plugin_send_message(self):
-        """Test creating send-message tool without spec."""
-        tool = create_tool_from_plugin("botfather", "send-message")
-        
-        assert tool.name == "botfather__send-message"
-        assert "send-message" in tool.description
+
+    def test_create_tool_from_plugin_coin_flip(self):
+        """Test creating coin_flip tool without spec."""
+        tool = create_tool_from_plugin("demo_math", "coin_flip")
+
+        assert tool.name == "demo_math__coin_flip"
+        assert "coin_flip" in tool.description
         assert tool.inputSchema["type"] == "object"
-    
-    def test_create_tool_from_plugin_deploy(self):
-        """Test creating deploy tool without spec."""
-        tool = create_tool_from_plugin("devops", "deploy")
-        
-        assert tool.name == "devops__deploy"
-        assert "deploy" in tool.description
+
+    def test_create_tool_from_plugin_word_count(self):
+        """Test creating word_count tool without spec."""
+        tool = create_tool_from_plugin("demo_text", "word_count")
+
+        assert tool.name == "demo_text__word_count"
+        assert "word_count" in tool.description
         assert tool.inputSchema["type"] == "object"
     
     def test_create_tool_from_plugin_with_spec(self):

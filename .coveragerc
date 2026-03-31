@@ -1,0 +1,12 @@
+[run]
+source = .
+omit =
+    tests/*
+    .venv/*
+    */site-packages/*
+    plugins/*
+
+[report]
+precision = 1
+fail_under = 35
+show_missing = true

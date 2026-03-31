@@ -55,13 +55,16 @@ async def server_process(test_port: int):
     env["MCP_PORT"] = str(test_port)
     env["MCP_HOST"] = "127.0.0.1"
 
+    repo_root = Path(__file__).resolve().parents[2]
+    cmd = [sys.executable, str(repo_root / "smcp.py"), "--host", "127.0.0.1", "--port", str(test_port)]
     print(f"Starting E2E server on port {test_port}")
     process = subprocess.Popen(
-        ["python", "smcp.py", "--host", "127.0.0.1", "--port", str(test_port)],
+        cmd,
         env=env,
+        cwd=str(repo_root),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True
+        text=True,
     )
 
     # Server startup is handled by readiness probe below
