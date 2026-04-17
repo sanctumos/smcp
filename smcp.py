@@ -341,9 +341,30 @@ def parse_commands_from_help(help_text: str) -> List[str]:
     return commands
 
 
+def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
+    """Letta/models often send hyphenated JSON keys; plugins use argparse dest with underscores."""
+    if not isinstance(arguments, dict):
+        return arguments
+    out = dict(arguments)
+    if "payload_json" in out and "payload-json" in out:
+        del out["payload-json"]
+    elif "payload-json" in out and "payload_json" not in out:
+        out["payload_json"] = out.pop("payload-json")
+    if "catering_invoice_id" in out and "catering-invoice-id" in out:
+        del out["catering-invoice-id"]
+    elif "catering-invoice-id" in out and "catering_invoice_id" not in out:
+        out["catering_invoice_id"] = out.pop("catering-invoice-id")
+    if "invoice_command" in out and "invoice-command" in out:
+        del out["invoice-command"]
+    elif "invoice-command" in out and "invoice_command" not in out:
+        out["invoice_command"] = out.pop("invoice-command")
+    return out
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
+        arguments = _coalesce_tool_argument_aliases(arguments)
         # Parse tool name to get plugin and command
         # Tool names use double underscore separator: "plugin__command"
         # Support both double underscore (new) and dot (legacy) for backward compatibility
