@@ -370,11 +370,16 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         # Add arguments
         # Convert underscores to dashes for command-line arguments (standard convention)
         for key, value in arguments.items():
+            if value is None:
+                continue
             # Convert parameter name (use_ssl) to CLI argument (--use-ssl)
             arg_name = key.replace('_', '-')
             if isinstance(value, bool):
                 if value:
                     cmd_args.append(f"--{arg_name}")
+            elif isinstance(value, dict):
+                # Letta/MCP often pass objects; plugins expect JSON on argv (not Python repr)
+                cmd_args.extend([f"--{arg_name}", json.dumps(value, separators=(',', ':'))])
             elif isinstance(value, list):
                 # For arrays/lists, pass each element as a separate argument
                 # This works with argparse nargs="+" or nargs="*"
