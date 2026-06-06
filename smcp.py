@@ -39,6 +39,8 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
 
+import governor
+
 # Global variables
 server: Server | None = None
 plugin_registry: Dict[str, Dict[str, Any]] = {}
@@ -705,26 +707,32 @@ def register_plugin_tools(server: Server):
                 logger.info(f"Created tool: {tool.name} (fallback method, no parameter schema)")
                 metrics["tools_registered"] += 1
     
+    governor.set_catalog(t.name for t in all_tools)
+    all_tools.append(governor.governor_tool())
+
     # Register the list_tools handler
     @server.list_tools()
     async def list_tools_handler():
-        """Return the list of available tools."""
-        # Suppress verbose logging in STDIO mode to avoid blocking
-        # Just return the tools immediately
-        return all_tools
-    
+        """Return attached tools (+ governor)."""
+        return governor.filter_tools(all_tools)
+
     # Register the call_tool handler
     @server.call_tool()
     async def call_tool_handler(tool_name: str, arguments: dict):
         """Handle tool calls."""
-        # Suppress verbose logging in STDIO mode
         if logger.level <= logging.INFO:
             logger.info(f"Tool call: {tool_name} with args: {arguments}")
         metrics["tool_calls_total"] += 1
+        if tool_name == governor.GOVERNOR_TOOL_NAME:
+            return [TextContent(type="text", text=governor.handle_governor(arguments))]
+        blocked = governor.gate_tool_call(tool_name)
+        if blocked is not None:
+            metrics["tool_calls_error"] += 1
+            return [TextContent(type="text", text=blocked)]
         try:
             result = await execute_plugin_tool(tool_name, arguments)
             if logger.level <= logging.INFO:
-                logger.info(f"Tool result: {result[:200]}...")  # Truncate long results
+                logger.info(f"Tool result: {result[:200]}...")
             return [TextContent(type="text", text=str(result))]
         except Exception as e:
             error_msg = f"Tool execution failed: {str(e)}"
