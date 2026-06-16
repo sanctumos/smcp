@@ -38,6 +38,13 @@ _TASKS_PROFILES: Dict[str, Set[str]] = {
     "full": set(),
 }
 
+# Kitchen POS Porter Vernal — partner portal only (kitchen_pos_partner__ prefix at wire)
+_PARTNER_PROFILES: Dict[str, Set[str]] = {
+    "partner": {
+        "kitchen_pos_partner__" + s for s in ("me", "menu", "windows", "orders")
+    },
+}
+
 _attached: Set[str] = set()
 _catalog: Set[str] = set()
 _bootstrapped = False
@@ -57,7 +64,7 @@ def _bootstrap() -> None:
     if _bootstrapped:
         return
     profile = (os.getenv("SMCP_ATTACH_PROFILE") or "full").strip().lower()
-    if profile in ("chatter", "admin", "full"):
+    if profile in ("chatter", "admin", "full", "partner"):
         attach_profile(profile)
     _bootstrapped = True
 
@@ -99,6 +106,8 @@ def attach_profile(profile: str) -> Dict[str, Any]:
         _attached.update(_TASKS_PROFILES.get("admin") or {n for n in _catalog if n.startswith("tasks__")})
     elif profile == "chatter":
         _attached.update(_TASKS_PROFILES["chatter"] & _catalog)
+    elif profile == "partner":
+        _attached.update(_PARTNER_PROFILES["partner"] & _catalog)
     else:
         raise ValueError(f"unknown profile: {profile}")
     return {"profile": profile, "attached": sorted(_attached)}
@@ -148,7 +157,7 @@ def governor_tool() -> Tool:
                 },
                 "tool": {"type": "string"},
                 "tools": {"type": "array", "items": {"type": "string"}},
-                "profile": {"type": "string", "enum": ["chatter", "admin", "full"]},
+                "profile": {"type": "string", "enum": ["chatter", "admin", "full", "partner"]},
                 "intent": {"type": "string"},
             },
             "required": ["action"],
@@ -186,7 +195,7 @@ def handle_governor(arguments: dict) -> str:
         return json.dumps(
             {
                 "matches": hints,
-                "note": "Detached tools return attach hint on call. Use attach-profile chatter|admin|full.",
+                "note": "Detached tools return attach hint on call. Use attach-profile chatter|admin|full|partner.",
             },
             indent=2,
         )
