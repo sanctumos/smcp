@@ -67,7 +67,7 @@ class TestBuildAppRoutes:
         fake_server.run = AsyncMock(return_value=None)
         fake_server.create_initialization_options = MagicMock(return_value={})
         app = smcp_module.build_app(fake_transport)
-        with patch.object(smcp_module, "server", fake_server):
+        with patch.object(smcp_module._default_ctx, "server", fake_server):
             async with _client(app) as c:
                 r = await c.get("/sse")
         assert r.status_code == 200
@@ -122,7 +122,7 @@ class TestAsyncMainOrchestration:
 
         with patch.object(sys, "argv", ["smcp.py", "--port", "8123"]), \
              patch.object(smcp_module, "load_letta_env_vars", lambda: None), \
-             patch.object(smcp_module, "register_plugin_tools", lambda s: None), \
+             patch.object(smcp_module, "register_plugin_tools", lambda s, ctx=None: None), \
              patch("uvicorn.Config", MagicMock()), \
              patch("uvicorn.Server", MagicMock(return_value=fake_server_instance)), \
              patch("signal.signal", fake_signal):

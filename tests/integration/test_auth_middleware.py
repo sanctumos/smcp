@@ -110,7 +110,7 @@ class TestAsyncMainAuthGuard:
         fake_instance.should_exit = False
         cm = (
             patch.object(smcp_module, "load_letta_env_vars", lambda: None),
-            patch.object(smcp_module, "register_plugin_tools", lambda s: None),
+            patch.object(smcp_module, "register_plugin_tools", lambda s, ctx=None: None),
             patch("uvicorn.Config", MagicMock()),
             patch("uvicorn.Server", MagicMock(return_value=fake_instance)),
             patch("signal.signal", MagicMock()),

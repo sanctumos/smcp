@@ -35,26 +35,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import functions directly from smcp.py since they're not exported from the package
 import smcp
-import governor
-
-
-@pytest.fixture(autouse=True)
-def _reset_governor_state():
-    """Isolate the module-level attach governor between tests.
-
-    governor.py keeps process-global attach/catalog state that otherwise leaks
-    across tests (and changes which tools list_tools returns). Reset before and
-    after every test so ordering never matters.
-    """
-    os.environ.pop("SMCP_ATTACH_PROFILE", None)
-    os.environ.pop("SMCP_PROFILES", None)
-    os.environ.pop("SMCP_ADMIN_PREFIX", None)
-    governor.reset_for_tests()
-    yield
-    os.environ.pop("SMCP_ATTACH_PROFILE", None)
-    os.environ.pop("SMCP_PROFILES", None)
-    os.environ.pop("SMCP_ADMIN_PREFIX", None)
-    governor.reset_for_tests()
 
 
 @pytest.fixture

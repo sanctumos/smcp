@@ -54,8 +54,9 @@ class TestFutureAnnotationsConsistency:
             assert all('"' in ln or "'" in ln or ln.isprintable() for ln in code_before)
 
     def test_module_level_union_annotation_is_deferred(self):
-        # With PEP 563 active, the `server` annotation is stored as a string, not
-        # evaluated (which would TypeError on 3.8/3.9).
-        ann = smcp_module.__annotations__.get("server")
+        # With PEP 563 active, union annotations are stored as strings, not
+        # evaluated (which would TypeError on 3.8/3.9 without the future import).
+        # ServerContext.server uses Server | None.
+        ann = smcp_module.ServerContext.__annotations__.get("server")
         assert isinstance(ann, str)
         assert "None" in ann

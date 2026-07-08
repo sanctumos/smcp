@@ -53,24 +53,55 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import CallToolResult, TextContent, Tool
 
-import governor
-
-# Global variables
-server: Server | None = None
-plugin_registry: Dict[str, Dict[str, Any]] = {}
-metrics: Dict[str, Any] = {
-    "start_time": time.time(),
-    "plugins_discovered": 0,
-    "tools_registered": 0,
-    "tool_calls_total": 0,
-    "tool_calls_success": 0,
-    "tool_calls_error": 0,
-}
+from governor import GOVERNOR_TOOL_NAME, Governor
 
 # Logging is configured explicitly at server start (configure_logging), never at
 # import time — importing this module must have no filesystem or root-logger
 # side effects (issue #52).
 _logging_configured = False
+
+
+@dataclass
+class ServerContext:
+    """Per-process MCP server state (issue #46).
+
+    Holds the plugin registry, metrics, the MCP ``Server`` handle, and a
+    ``Governor`` instance. Construct one context per server; contexts do not
+    share mutable state, so two can coexist in the same process without
+    cross-talk.
+    """
+
+    plugin_registry: Dict[str, Dict[str, Any]]
+    metrics: Dict[str, Any]
+    governor: Governor
+    server: Server | None = None
+
+    @classmethod
+    def create(cls) -> "ServerContext":
+        return cls(
+            plugin_registry={},
+            metrics={
+                "start_time": time.time(),
+                "plugins_discovered": 0,
+                "tools_registered": 0,
+                "tool_calls_total": 0,
+                "tool_calls_success": 0,
+                "tool_calls_error": 0,
+            },
+            governor=Governor(),
+            server=None,
+        )
+
+
+# Process-default context for the CLI entrypoints (async_main / STDIO) and for
+# tests that exercise the module-level API. Never used as shared state between
+# independently constructed contexts — call ``ServerContext.create()`` for that.
+_default_ctx: ServerContext = ServerContext.create()
+
+# Backward-compatible aliases: historical tests and helpers patch/read these
+# names. They always refer to the process-default context's objects.
+plugin_registry = _default_ctx.plugin_registry
+metrics = _default_ctx.metrics
 
 
 def configure_logging(log_dir: Optional[str] = None) -> logging.Logger:
@@ -232,8 +263,9 @@ def load_letta_env_vars() -> None:
         logger.warning(f"Letta env vars: {e}")
 
 
-def discover_plugins() -> Dict[str, Dict[str, Any]]:
+def discover_plugins(ctx: ServerContext | None = None) -> Dict[str, Dict[str, Any]]:
     """Discover available plugins in the plugins directory."""
+    ctx = ctx or _default_ctx
     # Use environment variable if set, otherwise use relative path
     plugins_dir_env = os.getenv("MCP_PLUGINS_DIR")
     if plugins_dir_env:
@@ -260,7 +292,7 @@ def discover_plugins() -> Dict[str, Dict[str, Any]]:
                 }
                 logger.info(f"Discovered plugin: {plugin_name}")
     
-    metrics["plugins_discovered"] = len(plugins)
+    ctx.metrics["plugins_discovered"] = len(plugins)
     logger.info(f"Discovered {len(plugins)} plugins: {list(plugins.keys())}")
     
     return plugins
@@ -509,14 +541,21 @@ def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
 _FLAG_STYLE_ACTIONS = frozenset({"store_true", "store_false"})
 
 
-def _command_param_specs(plugin_name: str, command: str) -> Dict[str, Dict[str, Any]]:
+def _command_param_specs(
+    plugin_name: str,
+    command: str,
+    ctx: ServerContext | None = None,
+) -> Dict[str, Dict[str, Any]]:
     """Return this command's parameter specs keyed by normalized (hyphenated) name.
 
-    Reads the cached --describe spec from plugin_registry. Returns an empty dict
-    when the plugin/command was discovered without a structured spec (e.g. the
-    help-scraping fallback), in which case callers use safe defaults.
+    Reads the cached --describe spec from the context's plugin registry. Returns
+    an empty dict when the plugin/command was discovered without a structured
+    spec (e.g. the help-scraping fallback), in which case callers use safe defaults.
     """
-    plugin_info = plugin_registry.get(plugin_name) or {}
+    # Prefer the module-level alias when using the default context so
+    # ``patch.object(smcp, "plugin_registry", ...)`` in tests still works.
+    registry = plugin_registry if ctx is None or ctx is _default_ctx else ctx.plugin_registry
+    plugin_info = registry.get(plugin_name) or {}
     commands = plugin_info.get("commands") or {}
     spec = commands.get(command) or {}
     out: Dict[str, Dict[str, Any]] = {}
@@ -706,13 +745,26 @@ def _tool_error_result(code: str, message: str) -> CallToolResult:
     )
 
 
-async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
+async def execute_plugin_tool(
+    tool_name: str,
+    arguments: dict,
+    ctx: ServerContext | None = None,
+) -> str:
     """Execute a plugin tool with the given arguments.
 
     Returns the plugin's stdout string on success; raises :class:`ToolError`
     (with a stable ``code``) on any failure so the caller can surface a
     structured MCP error (issue #53).
     """
+    ctx = ctx or _default_ctx
+    # Prefer module-level aliases on the default-context path so historical
+    # ``patch.object(smcp, "plugin_registry"|"metrics", ...)`` tests keep working.
+    if ctx is _default_ctx:
+        metrics_map = metrics
+        registry = plugin_registry
+    else:
+        metrics_map = ctx.metrics
+        registry = ctx.plugin_registry
     try:
         arguments = _coalesce_tool_argument_aliases(arguments)
         # Parse tool name to get plugin and command
@@ -721,7 +773,7 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         if '__' in tool_name:
             parts = tool_name.split('__', 1)  # Split on double underscore
             if len(parts) != 2:
-                metrics["tool_calls_error"] += 1
+                metrics_map["tool_calls_error"] += 1
                 raise ToolError(
                     "invalid_tool_name",
                     f"Invalid tool name format: {tool_name}. Expected 'plugin__command'",
@@ -731,17 +783,17 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
             # Legacy dot format for backward compatibility
             plugin_name, command = tool_name.split('.', 1)
         else:
-            metrics["tool_calls_error"] += 1
+            metrics_map["tool_calls_error"] += 1
             raise ToolError(
                 "invalid_tool_name",
                 f"Invalid tool name format: {tool_name}. Expected 'plugin__command' or 'plugin.command'",
             )
         
-        if plugin_name not in plugin_registry:
-            metrics["tool_calls_error"] += 1
+        if plugin_name not in registry:
+            metrics_map["tool_calls_error"] += 1
             raise ToolError("plugin_not_found", f"Plugin '{plugin_name}' not found")
         
-        plugin_info = plugin_registry[plugin_name]
+        plugin_info = registry[plugin_name]
         cli_path = plugin_info["path"]
         
         # Build command arguments
@@ -749,7 +801,7 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
 
         # Per-command parameter specs (from --describe) drive schema-aware
         # boolean rendering; empty for help-scraped/legacy plugins.
-        param_specs = _command_param_specs(plugin_name, command)
+        param_specs = _command_param_specs(plugin_name, command, ctx)
 
         # Add arguments
         # Convert underscores to dashes for command-line arguments (standard convention)
@@ -852,20 +904,20 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                     except Exception as partial_err:
                         logger.debug("Failed to read partial output on timeout: %s", partial_err)
                 if partial_msg is not None:
-                    metrics["tool_calls_error"] += 1
+                    metrics_map["tool_calls_error"] += 1
                     raise ToolError("timeout", partial_msg)
                 raise  # Re-raise to be caught by outer handler
         except asyncio.TimeoutError:
             # Kill the process if it times out
             await _terminate_process(process)
-            metrics["tool_calls_error"] += 1
+            metrics_map["tool_calls_error"] += 1
             raise ToolError(
                 "timeout", f"Plugin command timed out after {timeout_seconds} seconds"
             )
         except asyncio.CancelledError:
             # Client disconnected / request cancelled — never orphan the child (#18).
             await _terminate_process(process)
-            metrics["tool_calls_error"] += 1
+            metrics_map["tool_calls_error"] += 1
             raise
         finally:
             # Belt-and-suspenders: any exit path leaves no running subprocess (#18).
@@ -873,7 +925,7 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         
         if process.returncode == 0:
             result = stdout.decode().strip()
-            metrics["tool_calls_success"] += 1
+            metrics_map["tool_calls_success"] += 1
             return result
         else:
             # Plugin should output error as JSON to stdout, but if not, use returncode
@@ -891,7 +943,7 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                     error_msg = stdout.decode().strip() or f"Plugin exited with code {process.returncode}"
             else:
                 error_msg = f"Plugin exited with code {process.returncode} (no output)"
-            metrics["tool_calls_error"] += 1
+            metrics_map["tool_calls_error"] += 1
             raise ToolError("plugin_error", error_msg)
 
     except ToolError:
@@ -901,7 +953,7 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         # asyncio.CancelledError is BaseException and propagates past this guard.
         error_msg = f"Error executing tool {tool_name}: {e}"
         logger.error(error_msg)
-        metrics["tool_calls_error"] += 1
+        metrics_map["tool_calls_error"] += 1
         raise ToolError("internal_error", error_msg)
 
 
@@ -1009,7 +1061,7 @@ def create_tool_from_plugin(plugin_name: str, command: str, command_spec: Dict[s
     )
 
 
-def register_plugin_tools(server: Server):
+def register_plugin_tools(server: Server, ctx: ServerContext | None = None):
     """
     Register all discovered plugin tools with the MCP server.
     
@@ -1017,16 +1069,19 @@ def register_plugin_tools(server: Server):
     1. Try --describe command first (new structured method)
     2. Fall back to help text scraping (old method for compatibility)
     """
-    global plugin_registry
+    ctx = ctx or _default_ctx
     
-    # Discover plugins
-    plugin_registry = discover_plugins()
+    # Discover plugins into this context's registry (in-place so callers that
+    # hold a reference to ctx.plugin_registry — including the module-level
+    # alias for the default context — see the update without rebinding).
+    ctx.plugin_registry.clear()
+    ctx.plugin_registry.update(discover_plugins(ctx))
     
     # Collect all tools
     all_tools = []
     
     # Create tools for each plugin
-    for plugin_name, plugin_info in plugin_registry.items():
+    for plugin_name, plugin_info in ctx.plugin_registry.items():
         cli_path = plugin_info["path"]
         
         # Try --describe first (new method)
@@ -1071,7 +1126,7 @@ def register_plugin_tools(server: Server):
                 plugin_info.setdefault("commands", {})[command_name] = command_spec
 
                 logger.info(f"Created tool: {tool.name} (with parameter schema)")
-                metrics["tools_registered"] += 1
+                ctx.metrics["tools_registered"] += 1
         else:
             # Fallback: use help text scraping (old method)
             logger.info(f"Plugin {plugin_name}: Using help scraping fallback (--describe not supported)")
@@ -1089,16 +1144,17 @@ def register_plugin_tools(server: Server):
                 all_tools.append(tool)
                 
                 logger.info(f"Created tool: {tool.name} (fallback method, no parameter schema)")
-                metrics["tools_registered"] += 1
+                ctx.metrics["tools_registered"] += 1
     
-    governor.set_catalog(t.name for t in all_tools)
-    all_tools.append(governor.governor_tool())
+    gov = ctx.governor
+    gov.set_catalog(t.name for t in all_tools)
+    all_tools.append(gov.governor_tool())
 
     # Register the list_tools handler
     @server.list_tools()
     async def list_tools_handler():
         """Return attached tools (+ governor)."""
-        return governor.filter_tools(all_tools)
+        return gov.filter_tools(all_tools)
 
     # Register the call_tool handler
     @server.call_tool()
@@ -1106,15 +1162,15 @@ def register_plugin_tools(server: Server):
         """Handle tool calls."""
         if logger.level <= logging.INFO:
             logger.info(f"Tool call: {tool_name} with args: {arguments}")
-        metrics["tool_calls_total"] += 1
-        if tool_name == governor.GOVERNOR_TOOL_NAME:
-            return [TextContent(type="text", text=governor.handle_governor(arguments))]
-        blocked = governor.gate_tool_call(tool_name)
+        ctx.metrics["tool_calls_total"] += 1
+        if tool_name == GOVERNOR_TOOL_NAME:
+            return [TextContent(type="text", text=gov.handle(arguments))]
+        blocked = gov.gate_tool_call(tool_name)
         if blocked is not None:
-            metrics["tool_calls_error"] += 1
+            ctx.metrics["tool_calls_error"] += 1
             return [TextContent(type="text", text=blocked)]
         try:
-            result = await execute_plugin_tool(tool_name, arguments)
+            result = await execute_plugin_tool(tool_name, arguments, ctx)
             if logger.level <= logging.INFO:
                 logger.info(f"Tool result: {result[:200]}...")
             return [TextContent(type="text", text=str(result))]
@@ -1123,7 +1179,7 @@ def register_plugin_tools(server: Server):
             return _tool_error_result(te.code, te.message)
         except Exception as e:
             # Unexpected failure at the handler boundary.
-            metrics["tool_calls_error"] += 1
+            ctx.metrics["tool_calls_error"] += 1
             return _tool_error_result("internal_error", f"Tool execution failed: {str(e)}")
 
 
@@ -1147,12 +1203,16 @@ def _package_version() -> str:
     return __version__
 
 
-def create_server() -> Server:
+def create_server(ctx: ServerContext | None = None) -> Server:
     """Create and configure the MCP server instance.
 
     Reports the real package version (issue #49) rather than a hardcoded literal.
+    When ``ctx`` is given, the created server is stored on that context.
     """
-    return Server(name="sanctum-letta-mcp", version=_package_version())
+    ctx = ctx or _default_ctx
+    srv = Server(name="sanctum-letta-mcp", version=_package_version())
+    ctx.server = srv
+    return srv
 
 
 def parse_arguments():
@@ -1347,7 +1407,11 @@ def resolve_host(args) -> str:
     return host
 
 
-def build_app(sse_transport, auth_config: Optional[AuthConfig] = None):
+def build_app(
+    sse_transport,
+    auth_config: Optional[AuthConfig] = None,
+    ctx: ServerContext | None = None,
+):
     """
     Build the Starlette ASGI app that exposes the MCP SSE transport.
 
@@ -1363,6 +1427,8 @@ def build_app(sse_transport, auth_config: Optional[AuthConfig] = None):
     from starlette.routing import Route, Mount
     from starlette.responses import Response
 
+    ctx = ctx or _default_ctx
+
     async def sse_endpoint(request):
         """SSE connection endpoint."""
         # Use SSE transport's connect_sse method with proper streams
@@ -1370,10 +1436,13 @@ def build_app(sse_transport, auth_config: Optional[AuthConfig] = None):
             request.scope, request.receive, request._send
         ) as streams:
             # Run the MCP server with the SSE streams
-            await server.run(
+            mcp_server = ctx.server
+            if mcp_server is None:
+                return Response("MCP server not initialized", status_code=503)
+            await mcp_server.run(
                 streams[0],  # read_stream
                 streams[1],  # write_stream
-                server.create_initialization_options()
+                mcp_server.create_initialization_options()
             )
         # Return empty response to avoid NoneType error
         return Response()
@@ -1444,18 +1513,24 @@ async def async_main():
 
     logger.info(f"Starting Sanctum Letta MCP Server on {host}:{args.port}...")
     
-    # Create MCP server
-    global server
-    server = create_server()
+    # Create a fresh process-default context for this server run
+    ctx = ServerContext.create()
+    global _default_ctx, plugin_registry, metrics
+    _default_ctx = ctx
+    plugin_registry = ctx.plugin_registry
+    metrics = ctx.metrics
+
+    # Create MCP server bound to the context
+    create_server(ctx)
     
     # Register plugin tools
-    register_plugin_tools(server)
+    register_plugin_tools(ctx.server, ctx)
     
     # Create SSE transport
     sse_transport = SseServerTransport("/messages/")
     
     # Create Starlette app with SSE endpoints
-    app = build_app(sse_transport, auth_config)
+    app = build_app(sse_transport, auth_config, ctx)
     
     # Start server with proper signal handling
     logger.info("Starting server with SSE transport...")
