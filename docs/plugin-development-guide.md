@@ -318,6 +318,34 @@ def main():
 - Optional parameters should have `"required": false` and optionally a `"default"` value
 - The command will be called by SMCP during plugin discovery
 
+### Boolean parameters — declare your flag style (`store_true` vs value)
+
+SMCP renders boolean tool arguments onto your CLI's argv **according to what
+your `--describe` declares**, so both common argparse conventions work:
+
+| Your argparse | Declare in `--describe` | `true` sends | `false` sends |
+|---|---|---|---|
+| `add_argument("--verbose", action="store_true")` | `"action": "store_true"` | `--verbose` | *(omitted)* |
+| `add_argument("--no-cache", action="store_false", dest="cache")` | `"action": "store_false"` | `--no-cache` | *(omitted)* |
+| `add_argument("--is-available")` (parses `true`/`false` string) | *(no action, or `"action": "store"`)* | `--is-available true` | `--is-available false` |
+
+```json
+{
+  "name": "verbose",  "type": "boolean", "action": "store_true"
+}
+```
+
+- **Flag-style** (`store_true` / `store_false`): SMCP emits the bare flag **only
+  when the value is `true`** and omits it when `false` — argparse `store_*` flags
+  reject a trailing value, so this avoids `error: unrecognized arguments: false`
+  (issue #38).
+- **Value-style** (default, or `"action": "store"` / `"arg_style": "value"` /
+  `"takes_value": true`): SMCP always emits `--name true|false`, so a `false`
+  reaches your plugin instead of being silently dropped (issue #37). Parse it
+  with e.g. `str(val).lower() in ("true", "1", "yes")`.
+- **When you declare nothing**, SMCP defaults to **value-style**. Add
+  `"action": "store_true"` to opt a bare flag into flag-style.
+
 ## Advanced Plugin Development
 
 ### Complex Parameter Types

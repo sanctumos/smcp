@@ -365,6 +365,51 @@ def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
     return out
 
 
+_FLAG_STYLE_ACTIONS = frozenset({"store_true", "store_false"})
+
+
+def _command_param_specs(plugin_name: str, command: str) -> Dict[str, Dict[str, Any]]:
+    """Return this command's parameter specs keyed by normalized (hyphenated) name.
+
+    Reads the cached --describe spec from plugin_registry. Returns an empty dict
+    when the plugin/command was discovered without a structured spec (e.g. the
+    help-scraping fallback), in which case callers use safe defaults.
+    """
+    plugin_info = plugin_registry.get(plugin_name) or {}
+    commands = plugin_info.get("commands") or {}
+    spec = commands.get(command) or {}
+    out: Dict[str, Dict[str, Any]] = {}
+    for param in spec.get("parameters", []) or []:
+        name = str(param.get("name", "")).replace("_", "-")
+        if name:
+            out[name] = param
+    return out
+
+
+def _boolean_is_flag_style(param_spec: Optional[Dict[str, Any]]) -> bool:
+    """Decide how a boolean argument should be rendered on argv.
+
+    Flag-style (bare ``--name`` only when true; issue #38) when the plugin
+    declares an argparse ``store_true``/``store_false`` action (or the
+    ``arg_style: flag`` / ``takes_value: false`` aliases). Otherwise value-style
+    (``--name true|false``; issue #37), which is also the default when the
+    parameter makes no declaration.
+    """
+    if not param_spec:
+        return False
+    action = str(param_spec.get("action", "")).strip().lower()
+    if action in _FLAG_STYLE_ACTIONS:
+        return True
+    arg_style = str(param_spec.get("arg_style", "")).strip().lower()
+    if arg_style == "flag":
+        return True
+    if arg_style == "value":
+        return False
+    if param_spec.get("takes_value") is False:
+        return True
+    return False
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
@@ -391,7 +436,11 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         
         # Build command arguments
         cmd_args = [sys.executable, cli_path, command]
-        
+
+        # Per-command parameter specs (from --describe) drive schema-aware
+        # boolean rendering; empty for help-scraped/legacy plugins.
+        param_specs = _command_param_specs(plugin_name, command)
+
         # Add arguments
         # Convert underscores to dashes for command-line arguments (standard convention)
         for key, value in arguments.items():
@@ -400,7 +449,14 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
             # Convert parameter name (use_ssl) to CLI argument (--use-ssl)
             arg_name = key.replace('_', '-')
             if isinstance(value, bool):
-                cmd_args.extend([f"--{arg_name}", "true" if value else "false"])
+                # Render booleans per the plugin's --describe declaration:
+                # store_true/store_false -> bare flag only when true (#38);
+                # otherwise explicit --name true|false (#37, and the default).
+                if _boolean_is_flag_style(param_specs.get(arg_name)):
+                    if value:
+                        cmd_args.append(f"--{arg_name}")
+                else:
+                    cmd_args.extend([f"--{arg_name}", "true" if value else "false"])
             elif isinstance(value, dict):
                 # Letta/MCP often pass objects; plugins expect JSON on argv (not Python repr)
                 cmd_args.extend([f"--{arg_name}", json.dumps(value, separators=(',', ':'))])
@@ -686,7 +742,11 @@ def register_plugin_tools(server: Server):
                 # Create tool with full spec
                 tool = create_tool_from_plugin(plugin_name, command_name, command_spec)
                 all_tools.append(tool)
-                
+
+                # Cache the command spec so execute_plugin_tool can render
+                # arguments (notably booleans) per the plugin's declaration.
+                plugin_info.setdefault("commands", {})[command_name] = command_spec
+
                 logger.info(f"Created tool: {tool.name} (with parameter schema)")
                 metrics["tools_registered"] += 1
         else:
