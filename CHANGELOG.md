@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Plugin subprocess cleanup on cancel/disconnect** (issue #40, mirrors AnimusUNO #18): `execute_plugin_tool` now terminates its child process on `asyncio.CancelledError` and via a `try/finally` guard, escalating `terminate()` → `kill()` after a grace period, so client disconnects/cancellations no longer orphan plugin processes.
 - **Schema-aware boolean tool arguments** (issues #37 and #38): booleans are now rendered onto plugin argv per the parameter's `--describe` declaration. `store_true`/`store_false` flags emit a bare `--flag` only when `true` (no more `error: unrecognized arguments: false`, #38); value-style booleans emit `--flag true|false` so a `false` is never silently dropped (#37). Undeclared booleans default to value-style. See the plugin development guide for the convention.
 
 ### Testing

@@ -410,6 +410,34 @@ def _boolean_is_flag_style(param_spec: Optional[Dict[str, Any]]) -> bool:
     return False
 
 
+async def _terminate_process(process, grace: float = 5.0) -> None:
+    """Terminate a still-running subprocess: SIGTERM, then SIGKILL after a grace.
+
+    No-op when the process already exited. Used to guarantee we never orphan a
+    plugin child on cancellation, timeout, or unexpected errors (issue #18).
+    """
+    if process is None or process.returncode is not None:
+        return
+    try:
+        process.terminate()
+    except ProcessLookupError:
+        return
+    except Exception:
+        pass
+    try:
+        await asyncio.wait_for(process.wait(), timeout=grace)
+        return
+    except asyncio.TimeoutError:
+        pass
+    except Exception:
+        return
+    try:
+        process.kill()
+        await process.wait()
+    except Exception:
+        pass
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
@@ -557,15 +585,18 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                 raise  # Re-raise to be caught by outer handler
         except asyncio.TimeoutError:
             # Kill the process if it times out
-            if process:
-                try:
-                    process.kill()
-                    await process.wait()
-                except:
-                    pass
+            await _terminate_process(process)
             error_msg = f"Plugin command timed out after {timeout_seconds} seconds"
             metrics["tool_calls_error"] += 1
             return error_msg
+        except asyncio.CancelledError:
+            # Client disconnected / request cancelled — never orphan the child (#18).
+            await _terminate_process(process)
+            metrics["tool_calls_error"] += 1
+            raise
+        finally:
+            # Belt-and-suspenders: any exit path leaves no running subprocess (#18).
+            await _terminate_process(process)
         
         if process.returncode == 0:
             result = stdout.decode().strip()
