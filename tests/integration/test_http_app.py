@@ -79,6 +79,33 @@ class TestBuildAppRoutes:
             r = await c.post("/messages/", content=b"{}")
         assert r.status_code == 202
 
+    async def test_post_sse_body_read_error_returns_500(self):
+        """If reading the request body raises, the /sse shim returns 500."""
+        app = smcp_module.build_app(_FakeSseTransport())
+        sent = []
+
+        async def receive():
+            raise RuntimeError("broken stream")
+
+        async def send(msg):
+            sent.append(msg)
+
+        scope = {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "path": "/sse",
+            "raw_path": b"/sse",
+            "query_string": b"",
+            "headers": [(b"content-type", b"application/json")],
+            "client": ("127.0.0.1", 5555),
+            "server": ("test", 80),
+            "scheme": "http",
+        }
+        await app(scope, receive, send)
+        status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+        assert status == 500
+
 
 @pytest.mark.integration
 class TestAsyncMainOrchestration:

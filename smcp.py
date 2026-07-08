@@ -23,6 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import argparse
 import asyncio
+import hmac
 import json
 import logging
 import logging.handlers
@@ -32,9 +33,10 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, List, Sequence
+from typing import Dict, Any, List, Optional, Sequence
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
@@ -733,6 +735,12 @@ Examples:
         action="store_true",
         help="Allow external connections (default: localhost-only for security)"
     )
+
+    parser.add_argument(
+        "--require-auth",
+        action="store_true",
+        help="Require the API key even for loopback clients (equivalent to MCP_AUTH_ALLOW_LOOPBACK=0)"
+    )
     
     parser.add_argument(
         "--port",
@@ -751,6 +759,131 @@ Examples:
     return parser.parse_args()
 
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+@dataclass(frozen=True)
+class AuthConfig:
+    """Resolved authentication settings for the HTTP transport."""
+    keys: frozenset
+    allow_loopback: bool
+    disabled: bool
+
+    @property
+    def enforce(self) -> bool:
+        """True when the middleware should actually check credentials."""
+        return (not self.disabled) and bool(self.keys)
+
+
+def _env_truthy(value: Optional[str]) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_auth_config(require_auth: bool = False) -> AuthConfig:
+    """
+    Read authentication settings from the environment.
+
+    - MCP_API_KEY / MCP_API_KEYS (comma-separated) define accepted keys.
+    - MCP_AUTH_DISABLED explicitly turns auth (and the external-bind guard) off.
+    - MCP_AUTH_ALLOW_LOOPBACK (default on) lets loopback clients skip the key;
+      --require-auth (require_auth=True) forces it off.
+    """
+    disabled = _env_truthy(os.getenv("MCP_AUTH_DISABLED"))
+
+    raw_keys: List[str] = []
+    single = (os.getenv("MCP_API_KEY") or "").strip()
+    if single:
+        raw_keys.append(single)
+    for part in (os.getenv("MCP_API_KEYS") or "").split(","):
+        part = part.strip()
+        if part:
+            raw_keys.append(part)
+    keys = frozenset(raw_keys)
+
+    allow_loopback = True
+    if os.getenv("MCP_AUTH_ALLOW_LOOPBACK") is not None:
+        allow_loopback = _env_truthy(os.getenv("MCP_AUTH_ALLOW_LOOPBACK"))
+    if require_auth:
+        allow_loopback = False
+
+    return AuthConfig(keys=keys, allow_loopback=allow_loopback, disabled=disabled)
+
+
+def _extract_presented_key(headers: Dict[str, str]) -> Optional[str]:
+    """
+    Pull the presented credential from request headers (lower-cased keys).
+
+    Accepts 'Authorization: Bearer <key>' (primary) or 'X-API-Key: <key>'.
+    """
+    auth = headers.get("authorization")
+    if auth:
+        prefix, _, token = auth.partition(" ")
+        if prefix.lower() == "bearer" and token.strip():
+            return token.strip()
+    api_key = headers.get("x-api-key")
+    if api_key and api_key.strip():
+        return api_key.strip()
+    return None
+
+
+def is_authorized(headers: Dict[str, str], client_host: str, cfg: AuthConfig) -> bool:
+    """Decide whether a request may proceed under the given AuthConfig."""
+    if not cfg.enforce:
+        return True
+    if cfg.allow_loopback and client_host in _LOOPBACK_HOSTS:
+        return True
+    presented = _extract_presented_key(headers)
+    if not presented:
+        return False
+    # Constant-time comparison against every configured key.
+    authorized = False
+    for key in cfg.keys:
+        if hmac.compare_digest(presented, key):
+            authorized = True
+    return authorized
+
+
+class AuthMiddleware:
+    """
+    Raw ASGI middleware that guards the HTTP transport.
+
+    Implemented at the ASGI level (not Starlette BaseHTTPMiddleware) so the
+    long-lived SSE response stream is never buffered.
+    """
+
+    def __init__(self, app, cfg: AuthConfig):
+        self.app = app
+        self.cfg = cfg
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http" or not self.cfg.enforce:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {
+            k.decode("latin-1").lower(): v.decode("latin-1")
+            for k, v in scope.get("headers", [])
+        }
+        client = scope.get("client")
+        client_host = client[0] if client else ""
+
+        if is_authorized(headers, client_host, self.cfg):
+            await self.app(scope, receive, send)
+            return
+
+        body = b'{"error":"unauthorized"}'
+        await send({
+            "type": "http.response.start",
+            "status": 401,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"www-authenticate", b"Bearer"),
+                (b"content-length", str(len(body)).encode("ascii")),
+            ],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+
 def resolve_host(args) -> str:
     """
     Determine the bind host from parsed arguments.
@@ -767,7 +900,7 @@ def resolve_host(args) -> str:
     return host
 
 
-def build_app(sse_transport):
+def build_app(sse_transport, auth_config: Optional[AuthConfig] = None):
     """
     Build the Starlette ASGI app that exposes the MCP SSE transport.
 
@@ -775,6 +908,9 @@ def build_app(sse_transport):
       GET  /sse        -> establish SSE stream and run the MCP server over it
       POST /sse        -> Letta-compat shim (messages belong on /messages/)
       /messages/*      -> SSE transport POST handler (JSON-RPC ingress)
+
+    When auth_config enforces credentials, the app is wrapped in AuthMiddleware
+    so every HTTP request is checked before it reaches a route.
     """
     from starlette.applications import Starlette
     from starlette.routing import Route, Mount
@@ -817,11 +953,15 @@ def build_app(sse_transport):
         except Exception as e:
             return Response(f"Error processing request: {str(e)}", status_code=500)
 
-    return Starlette(routes=[
+    app = Starlette(routes=[
         Route("/sse", sse_endpoint, methods=["GET"]),
         Route("/sse", sse_post_endpoint, methods=["POST"]),
         Mount("/messages/", app=sse_transport.handle_post_message),
     ])
+
+    if auth_config is not None and auth_config.enforce:
+        return AuthMiddleware(app, auth_config)
+    return app
 
 
 async def async_main():
@@ -831,6 +971,24 @@ async def async_main():
 
     # Determine host binding
     host = resolve_host(args)
+
+    # Resolve authentication and fail closed on an unauthenticated external bind
+    auth_config = resolve_auth_config(require_auth=getattr(args, "require_auth", False))
+    if host == "0.0.0.0" and not auth_config.enforce and not auth_config.disabled:
+        logger.critical(
+            "Refusing to bind externally (0.0.0.0) without authentication. "
+            "Set MCP_API_KEY (or MCP_API_KEYS) to require a key, or set "
+            "MCP_AUTH_DISABLED=1 to explicitly run open (not recommended)."
+        )
+        sys.exit(2)
+    if auth_config.disabled and host == "0.0.0.0":
+        logger.warning("⚠️  Auth is DISABLED (MCP_AUTH_DISABLED) while bound externally — server is open.")
+    elif auth_config.enforce:
+        logger.info(
+            "🔐 API-key authentication enabled (%d key(s); loopback %s).",
+            len(auth_config.keys),
+            "allowed" if auth_config.allow_loopback else "also required",
+        )
 
     logger.info(f"Starting Sanctum Letta MCP Server on {host}:{args.port}...")
     
@@ -845,7 +1003,7 @@ async def async_main():
     sse_transport = SseServerTransport("/messages/")
     
     # Create Starlette app with SSE endpoints
-    app = build_app(sse_transport)
+    app = build_app(sse_transport, auth_config)
     
     # Start server with proper signal handling
     logger.info("Starting server with SSE transport...")

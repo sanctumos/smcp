@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **HTTP/SSE transport authentication** (issue #39): optional shared-secret auth via `Authorization: Bearer <key>` / `X-API-Key`, configured with `MCP_API_KEY` / `MCP_API_KEYS`. `--allow-external` now **fails closed** — it refuses to start without a key unless `MCP_AUTH_DISABLED=1`. Loopback clients bypass by default (`MCP_AUTH_ALLOW_LOOPBACK`, `--require-auth`). Enforced by a raw ASGI middleware so SSE streaming is never buffered. STDIO transport is unaffected.
 - **`demo_math`** and **`demo_text`** bundled plugins: real behavior + `--describe` JSON for MCP tool schemas (replacing stub `botfather` / `devops`).
+
+### Testing
+
+- Dev-branch coverage raised to ~96% (`fail_under` ratcheted 35 → 90) across unit, integration, and e2e, including full coverage of the new auth code.
 
 ### Removed
 

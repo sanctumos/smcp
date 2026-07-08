@@ -98,6 +98,27 @@ python smcp.py --host 127.0.0.1
 python smcp.py --allow-external
 ```
 
+#### API-key authentication (HTTP/SSE transport)
+
+The HTTP/SSE transport supports shared-secret authentication. Configure a key
+and clients must present it as `Authorization: Bearer <key>` (or `X-API-Key: <key>`):
+
+```bash
+export MCP_API_KEY="your-long-random-secret"
+python smcp.py --allow-external
+```
+
+Key rules:
+
+- **Fail closed:** `--allow-external` (binding `0.0.0.0`) **refuses to start**
+  without `MCP_API_KEY`/`MCP_API_KEYS`, unless you explicitly set
+  `MCP_AUTH_DISABLED=1` to run open (not recommended).
+- **Localhost stays easy:** a default `python smcp.py` on `127.0.0.1` needs no
+  key. Loopback clients bypass the key by default even when one is set; pass
+  `--require-auth` (or `MCP_AUTH_ALLOW_LOOPBACK=0`) to require it locally too.
+- Requests without a valid key get `401 Unauthorized` (`WWW-Authenticate: Bearer`).
+- The STDIO transport has no network surface and is unaffected.
+
 **Custom port**:
 ```bash
 python smcp.py --port 9000
@@ -127,6 +148,10 @@ When deployed via the master Animus installer, SMCP is automatically:
 | `MCP_PORT` | `8000` | Port for the MCP server |
 | `MCP_PLUGINS_DIR` | `plugins/` | Directory containing plugins |
 | `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost-only for security) |
+| `MCP_API_KEY` | — | Accepted API key for the HTTP/SSE transport. Presented by clients as `Authorization: Bearer <key>` or `X-API-Key: <key>`. |
+| `MCP_API_KEYS` | — | Comma-separated list of accepted keys (for rotation / multiple clients). Merged with `MCP_API_KEY`. |
+| `MCP_AUTH_DISABLED` | `0` | Explicit escape hatch: `1` disables auth **and** the external-bind guard (logged loudly). |
+| `MCP_AUTH_ALLOW_LOOPBACK` | `1` | When `1`, loopback (`127.0.0.1`/`::1`) clients skip the key check. Set `0` (or use `--require-auth`) to require the key even locally. |
 | `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env` (same file Letta uses); default URL is `http://127.0.0.1:8284`. |
 | `LETTA_SERVER_PASSWORD` | — | Bearer token for Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
 | `LETTA_AGENT_ID` | — | Optional. If set, only this agent's env vars are loaded; otherwise all agents' vars are merged. |
