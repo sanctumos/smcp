@@ -62,6 +62,42 @@ class TestLoadLettaDotenv:
                 _load_letta_dotenv()
                 assert os.environ.get("LETTA_SERVER_PASSWORD") is None or os.environ.get("LETTA_SERVER_PASSWORD") == ""
 
+    def test_does_not_overwrite_keys_already_in_environment(self):
+        """Lines in ~/.letta/.env are skipped when the key is already set."""
+        with tempfile.TemporaryDirectory() as d:
+            env_dir = Path(d) / ".letta"
+            env_dir.mkdir()
+            (env_dir / ".env").write_text(
+                "export LETTA_SERVER_PASSWORD=fromfile\nexport LETTA_API_KEY=fromapi\n"
+            )
+            with patch.dict(
+                os.environ,
+                {
+                    "HOME": d,
+                    "LETTA_SERVER_PASSWORD": "already-set",
+                    "LETTA_API_KEY": "already-api",
+                },
+                clear=False,
+            ):
+                os.environ.pop("LETTA_SERVER_URL", None)
+                _load_letta_dotenv()
+                assert os.environ.get("LETTA_SERVER_PASSWORD") == "already-set"
+                assert os.environ.get("LETTA_API_KEY") == "already-api"
+
+    def test_read_failure_is_swallowed(self, monkeypatch):
+        """Unreadable ~/.letta/.env is logged and ignored."""
+        with tempfile.TemporaryDirectory() as d:
+            env_dir = Path(d) / ".letta"
+            env_dir.mkdir()
+            env_file = env_dir / ".env"
+            env_file.write_text("export LETTA_SERVER_PASSWORD=secret\n")
+            monkeypatch.setenv("HOME", d)
+            for k in ("LETTA_SERVER_URL", "LETTA_SERVER_PASSWORD", "LETTA_API_KEY"):
+                monkeypatch.delenv(k, raising=False)
+            with patch.object(Path, "read_text", side_effect=OSError("permission denied")):
+                _load_letta_dotenv()
+            assert os.environ.get("LETTA_SERVER_PASSWORD") is None
+
 
 @pytest.mark.unit
 class TestLoadLettaEnvVarsNoOp:

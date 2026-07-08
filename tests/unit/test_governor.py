@@ -305,6 +305,73 @@ class TestProfileConfig:
         out = json.loads(g.handle({"action": "help"}))
         assert out["matches"] == []
 
+    def test_profile_config_must_be_json_object(self, monkeypatch, tmp_path):
+        bad = tmp_path / "array.json"
+        bad.write_text("[1, 2, 3]", encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(bad))
+        g = Governor()
+        with pytest.raises(ValueError, match="must be a JSON object"):
+            g.profile_names()
+
+    def test_profile_directory_empty_raises(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        g = Governor()
+        with pytest.raises(ValueError, match="contains no \\*\\.json files"):
+            g.profile_names()
+
+    def test_profile_path_missing_raises(self, monkeypatch, tmp_path):
+        missing = tmp_path / "does-not-exist.json"
+        monkeypatch.setenv("SMCP_PROFILES", str(missing))
+        g = Governor()
+        with pytest.raises(ValueError, match="path does not exist"):
+            g.profile_names()
+
+    def test_prefix_mode_requires_prefix(self, monkeypatch, tmp_path):
+        cfg = {"profiles": {"p": {"mode": "prefix"}}}
+        (tmp_path / "p.json").write_text(json.dumps(cfg), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        g = Governor()
+        g.set_catalog(t.name for t in _sample_tools())
+        with pytest.raises(ValueError, match="mode=prefix requires"):
+            g.attach_profile("p")
+
+    def test_glob_mode_requires_pattern(self, monkeypatch, tmp_path):
+        cfg = {"profiles": {"p": {"mode": "glob"}}}
+        (tmp_path / "p.json").write_text(json.dumps(cfg), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        g = Governor()
+        g.set_catalog(t.name for t in _sample_tools())
+        with pytest.raises(ValueError, match="mode=glob requires"):
+            g.attach_profile("p")
+
+    def test_explicit_mode_requires_tools_array(self, monkeypatch, tmp_path):
+        cfg = {"profiles": {"p": {"mode": "explicit", "tools": "not-a-list"}}}
+        (tmp_path / "p.json").write_text(json.dumps(cfg), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        g = Governor()
+        g.set_catalog(t.name for t in _sample_tools())
+        with pytest.raises(ValueError, match="mode=explicit requires"):
+            g.attach_profile("p")
+
+    def test_unsupported_profile_mode_raises(self, monkeypatch, tmp_path):
+        cfg = {"profiles": {"p": {"mode": "regex", "pattern": ".*"}}}
+        (tmp_path / "p.json").write_text(json.dumps(cfg), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        g = Governor()
+        g.set_catalog(t.name for t in _sample_tools())
+        with pytest.raises(ValueError, match="unsupported mode"):
+            g.attach_profile("p")
+
+    def test_effective_profile_falls_back_when_no_candidate_matches(self, monkeypatch):
+        monkeypatch.delenv("SMCP_PROFILES", raising=False)
+        monkeypatch.setenv("SMCP_ATTACH_PROFILE", "missing-profile")
+        g = Governor()
+        g._profiles_loaded = True
+        g._profile_defs = {}
+        g._default_profile = "also-missing"
+        g._active_profile = "still-missing"
+        assert g._effective_profile() == "full"
+
 
 @pytest.mark.unit
 class TestIsolation:

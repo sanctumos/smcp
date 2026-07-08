@@ -46,9 +46,16 @@ def main():
     sub.add_parser("failraw")
     sub.add_parser("silentfail")
 
+    stderr_echo = sub.add_parser("stderr_echo")
+    stderr_echo.add_argument("--name")
+
     args = p.parse_args()
     if args.command == "echo":
         print(json.dumps({"name": args.name, "flag": args.flag, "tag": args.tag}))
+        sys.exit(0)
+    if args.command == "stderr_echo":
+        sys.stderr.write("plugin-stderr-line\\n")
+        print(json.dumps({"name": args.name}))
         sys.exit(0)
     if args.command == "failjson":
         print(json.dumps({"error": "boom-json"})); sys.exit(1)
@@ -129,6 +136,66 @@ class TestExecutePluginToolReal:
                 await smcp_module.execute_plugin_tool("toy__echo", {"name": "x"})
         assert "timed out" in ei.value.message
         assert ei.value.code == "timeout"
+
+    async def test_timeout_partial_output(self, real_plugin):
+        """Inner timeout with readable partial stdout surfaces partial output (#41)."""
+        mock_process = MagicMock()
+        mock_process.returncode = None
+        mock_process.stdout = MagicMock()
+        mock_process.stderr = MagicMock()
+        mock_process.kill = MagicMock()
+        mock_process.wait = AsyncMock(return_value=0)
+
+        wait_calls = {"n": 0}
+
+        async def fake_wait_for(coro, timeout):
+            wait_calls["n"] += 1
+            if wait_calls["n"] == 1:
+                if asyncio.iscoroutine(coro):
+                    coro.close()
+                raise asyncio.TimeoutError()
+            if wait_calls["n"] == 2:
+                return 0
+            if wait_calls["n"] == 3:
+                return b'{"partial": true}'
+            return await asyncio.wait_for(coro, timeout)
+
+        with patch.dict(os.environ, {"MCP_PLUGIN_TIMEOUT": "1"}), \
+             patch.object(smcp_module.asyncio, "create_subprocess_exec", new=AsyncMock(return_value=mock_process)), \
+             patch.object(smcp_module.asyncio, "wait_for", side_effect=fake_wait_for):
+            with pytest.raises(smcp_module.ToolError) as ei:
+                await smcp_module.execute_plugin_tool("toy__echo", {"name": "x"})
+        assert ei.value.code == "timeout"
+        assert "Partial output" in ei.value.message
+        assert "partial" in ei.value.message
+
+    async def test_none_argument_values_are_skipped(self, real_plugin):
+        result = await smcp_module.execute_plugin_tool(
+            "toy__echo", {"name": None, "tag": ["only-tag"]}
+        )
+        data = json.loads(result)
+        assert data["name"] is None
+        assert data["tag"] == ["only-tag"]
+
+    async def test_stderr_is_consumed_on_success(self, real_plugin):
+        result = await smcp_module.execute_plugin_tool(
+            "toy__stderr_echo", {"name": "stderr-test"}
+        )
+        assert json.loads(result)["name"] == "stderr-test"
+
+    async def test_execute_uses_explicit_server_context(self, real_plugin, tmp_path):
+        ctx = smcp_module.ServerContext.create()
+        plug_dir = tmp_path / "plugins" / "iso"
+        plug_dir.mkdir(parents=True)
+        cli = plug_dir / "cli.py"
+        cli.write_text(_PLUGIN_CLI)
+        os.chmod(cli, 0o755)
+        ctx.plugin_registry["iso"] = {"path": str(cli), "commands": {}}
+        result = await smcp_module.execute_plugin_tool("iso__echo", {"name": "ctx"}, ctx=ctx)
+        assert json.loads(result)["name"] == "ctx"
+        assert ctx.metrics["tool_calls_success"] == 1
+        before = smcp_module.metrics.get("tool_calls_success", 0)
+        assert smcp_module.metrics["tool_calls_success"] == before
 
 
 # --- parse_arguments / resolve_host / create_server ------------------------
@@ -275,6 +342,112 @@ class TestRegisterHandlers:
         assert out.isError is True
         assert out.structuredContent["error"]["code"] == "plugin_error"
         assert out.content[0].text == "boom"
+
+    async def test_call_tool_routes_governor_tool(self):
+        from governor import GOVERNOR_TOOL_NAME
+
+        ctx = smcp_module.ServerContext.create()
+        describe = {
+            "contract_version": "1.0",
+            "plugin": {"name": "toy", "version": "1.0.0"},
+            "commands": [{"name": "echo", "description": "Echo", "parameters": []}],
+        }
+        captured = {}
+
+        class CapSrv:
+            def list_tools(self):
+                def deco(fn):
+                    captured["list"] = fn
+                    return fn
+                return deco
+
+            def call_tool(self):
+                def deco(fn):
+                    captured["call"] = fn
+                    return fn
+                return deco
+
+        with patch.object(smcp_module, "discover_plugins", return_value={"toy": {"path": "/x/cli.py"}}), \
+             patch.object(smcp_module, "get_plugin_describe", return_value=describe):
+            smcp_module.register_plugin_tools(CapSrv(), ctx)
+
+        ctx.governor.set_catalog(["toy__echo"])
+        out = await captured["call"](GOVERNOR_TOOL_NAME, {"action": "list-available"})
+        payload = json.loads(out[0].text)
+        assert "toy__echo" in payload["tools"]
+        assert ctx.metrics["tool_calls_total"] == 1
+
+    async def test_call_tool_blocks_detached_tool(self):
+        ctx = smcp_module.ServerContext.create()
+        describe = {
+            "contract_version": "1.0",
+            "plugin": {"name": "toy", "version": "1.0.0"},
+            "commands": [{"name": "echo", "description": "Echo", "parameters": []}],
+        }
+        captured = {}
+
+        class CapSrv:
+            def list_tools(self):
+                def deco(fn):
+                    captured["list"] = fn
+                    return fn
+                return deco
+
+            def call_tool(self):
+                def deco(fn):
+                    captured["call"] = fn
+                    return fn
+                return deco
+
+        with patch.object(smcp_module, "discover_plugins", return_value={"toy": {"path": "/x/cli.py"}}), \
+             patch.object(smcp_module, "get_plugin_describe", return_value=describe):
+            smcp_module.register_plugin_tools(CapSrv(), ctx)
+
+        ctx.governor.set_catalog(["toy__echo"])
+        assert ctx.governor.gate_tool_call("toy__echo") is None
+        assert ctx.governor.detach("toy__echo") is True
+        assert ctx.governor.is_attached("toy__echo") is False
+        with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock()) as exec_mock:
+            out = await captured["call"]("toy__echo", {})
+        exec_mock.assert_not_awaited()
+        assert out[0].text
+        payload = json.loads(out[0].text)
+        assert payload["error"] == "tool_not_attached"
+        assert ctx.metrics["tool_calls_error"] == 1
+
+    async def test_register_skips_describe_command_without_name(self):
+        describe = {
+            "contract_version": "1.0",
+            "plugin": {"name": "toy", "version": "1.0.0"},
+            "commands": [
+                {"description": "missing name", "parameters": []},
+                {"name": "echo", "description": "Echo", "parameters": []},
+            ],
+        }
+        captured = {}
+
+        class CapSrv:
+            def list_tools(self):
+                def deco(fn):
+                    captured["list"] = fn
+                    return fn
+                return deco
+
+            def call_tool(self):
+                def deco(fn):
+                    captured["call"] = fn
+                    return fn
+                return deco
+
+        with patch.object(smcp_module, "discover_plugins", return_value={"toy": {"path": "/x/cli.py"}}), \
+             patch.object(smcp_module, "get_plugin_describe", return_value=describe), \
+             patch.object(smcp_module, "validate_describe_contract", return_value=[]):
+            smcp_module.register_plugin_tools(CapSrv())
+
+        tools = await captured["list"]()
+        names = [t.name for t in tools]
+        assert "toy__echo" in names
+        assert len([n for n in names if n.startswith("toy__") and n != "toy__echo"]) == 0
 
 
 # --- Letta env loading extra branches --------------------------------------

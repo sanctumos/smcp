@@ -27,7 +27,7 @@ from __future__ import annotations
 # importable module `smcp`; there is no separate package __init__.py to drift
 # out of sync. `pyproject.toml` carries the same version as the build-time
 # source of truth.
-__version__ = "3.0.3"
+__version__ = "3.1.0"
 __author__ = "Mark Rizzn Hopkins"
 __license__ = "AGPLv3"
 __url__ = "https://sanctumos.org"
@@ -875,6 +875,8 @@ async def execute_plugin_tool(
                 
                 return stdout_data, stderr_data
             
+            stdout = b""
+            stderr = b""
             try:
                 if timeout_seconds is None:
                     stdout, stderr = await read_output()

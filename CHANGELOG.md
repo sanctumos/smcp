@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [3.1.0] - 2026-07-08
 
 ### Added
 
@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **`create_server()` reports the real package version and drops dead params** (issue #49): the server no longer advertises a hardcoded `1.0.0`; it derives the version from the package `__version__`. Removed the unused `host`/`port` parameters. Narrowed two bare `except:` clauses in `execute_plugin_tool` to `except Exception:` (with debug logging) so `KeyboardInterrupt`/`SystemExit` are no longer swallowed.
-- **Advertised Python 3.8/3.9 support is now real** (issue #48): added `from __future__ import annotations` to `smcp.py` and `smcp_stdio.py` (governor already had it) so the PEP 604 union annotations (`X | None`) are deferred and the modules import on 3.8/3.9. `requires-python >=3.8` is now truthful.
+- **Partial plugin output on subprocess timeout** no longer crashes when building the timeout error message (`stdout`/`stderr` are initialized before the timed read path).
 - **Structured (array/object) tool arguments now round-trip to plugins as clean JSON** (issue #56): `execute_plugin_tool` renders array/object arguments schema-aware. Arrays of objects are serialized as a single `--name <json>` (no more Python `repr` on argv), object params and bare dicts are JSON-encoded, and Letta's single-child `{"item": ...}` array coercion is normalized centrally so array-typed params receive a real list. Scalar arrays still render as repeated flags (argparse `nargs`/`action=append`). This is the root-cause fix behind the `kitchen_pos` catering "recipients array required" failures.
 
 ### Changed
@@ -27,9 +27,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Logging is configured at server start, not at import** (issue #52). Importing `smcp` no longer creates a `logs/` directory or attaches handlers to the root logger. `setup_logging()` is replaced by an idempotent `configure_logging(log_dir=None)` called from `async_main()`; the log directory is configurable via `MCP_LOG_DIR` (default `logs`). STDIO transport is unaffected.
 - **Core is product-agnostic: argument-alias coalescing is now generic** (issue #44). `_coalesce_tool_argument_aliases` no longer hardcodes any plugin's field names (previously `payload_json` / `catering_invoice_id` / `invoice_command`). It collapses hyphen/underscore key variants to a single canonical key for *any* parameter, so new plugins plug in with zero core edits.
 
+### Security
+
+- **HTTP/SSE transport authentication** (issue #39, carried from 3.0.3 dev line): shared-secret auth via `Authorization: Bearer <key>` / `X-API-Key`, configured with `MCP_API_KEY` / `MCP_API_KEYS`. `--allow-external` **fails closed** — it refuses to start without a key unless `MCP_AUTH_DISABLED=1`. Loopback clients bypass by default (`MCP_AUTH_ALLOW_LOOPBACK`, `--require-auth`). Enforced by a raw ASGI middleware so SSE streaming is never buffered. STDIO transport is unaffected. **Operators on externally bound instances should upgrade and configure a key before restart.**
+
 ### Documentation
 
 - Full documentation overhaul: rebranded this repository's docs to **Sanctum** (SanctumOS / `sanctumos.org`), leaving the Animus branding to the `AnimusUNO/smcp` fork. Corrected clone URLs to `sanctumos/smcp`, the default plugins directory to `plugins/`, and the MCP server name to `sanctum-letta-mcp`. Replaced the stale "no authentication" API-reference section with the real API-key auth, documented `--require-auth` / `--plugin-timeout` and the `MCP_API_KEY` / `MCP_PLUGIN_TIMEOUT` / `SMCP_ATTACH_PROFILE` environment variables across the guides, and removed references to the retired `botfather` / `devops` plugins in favor of the bundled `demo_math` / `demo_text`. Moved one-time transition notes to `docs/history/`.
+
+### Testing
+
+- Dev-branch coverage raised to **99%+** (`fail_under` ratcheted to **90**) across unit, integration, and e2e — including governor profiles, ServerContext isolation, describe-contract validation, auth middleware, and plugin execution edge paths.
+
+## Unreleased
+
+### Added
+
+- *(nothing yet)*
+
+### Fixed
+
+- *(nothing yet)*
 
 ## [3.0.3] - 2026-07-08
 

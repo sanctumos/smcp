@@ -7,6 +7,7 @@ Licensed under AGPLv3 (see LICENSE).
 """
 
 import sys
+import os
 import importlib.util
 import contextlib
 from pathlib import Path
@@ -80,6 +81,15 @@ class TestBuildAppRoutes:
             r = await c.post("/messages/", content=b"{}")
         assert r.status_code == 202
 
+    async def test_get_sse_returns_503_when_server_uninitialized(self):
+        ctx = smcp_module.ServerContext.create()
+        ctx.server = None
+        app = smcp_module.build_app(_FakeSseTransport(), ctx=ctx)
+        async with _client(app) as c:
+            r = await c.get("/sse")
+        assert r.status_code == 503
+        assert "not initialized" in r.text
+
     async def test_post_sse_body_read_error_returns_500(self):
         """If reading the request body raises, the /sse shim returns 500."""
         app = smcp_module.build_app(_FakeSseTransport())
@@ -139,3 +149,29 @@ class TestAsyncMainOrchestration:
         with patch.object(smcp_module, "async_main", new=AsyncMock(return_value=None)) as m:
             smcp_module.main()
         m.assert_awaited_once()
+
+    async def test_async_main_refuses_external_bind_without_auth(self):
+        with patch.object(sys, "argv", ["smcp.py", "--allow-external"]), \
+             patch.object(smcp_module, "load_letta_env_vars", lambda: None), \
+             patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("MCP_API_KEY", None)
+            os.environ.pop("MCP_API_KEYS", None)
+            os.environ.pop("MCP_AUTH_DISABLED", None)
+            with pytest.raises(SystemExit) as ei:
+                await smcp_module.async_main()
+        assert ei.value.code == 2
+
+    async def test_async_main_allows_external_bind_when_auth_disabled(self):
+        fake_server_instance = MagicMock()
+        fake_server_instance.serve = AsyncMock(return_value=None)
+        fake_server_instance.should_exit = False
+
+        with patch.object(sys, "argv", ["smcp.py", "--allow-external"]), \
+             patch.object(smcp_module, "load_letta_env_vars", lambda: None), \
+             patch.object(smcp_module, "register_plugin_tools", lambda s, ctx=None: None), \
+             patch.dict(os.environ, {"MCP_AUTH_DISABLED": "1"}, clear=False), \
+             patch("uvicorn.Config", MagicMock()), \
+             patch("uvicorn.Server", MagicMock(return_value=fake_server_instance)), \
+             patch("signal.signal", MagicMock()):
+            await smcp_module.async_main()
+        fake_server_instance.serve.assert_awaited_once()

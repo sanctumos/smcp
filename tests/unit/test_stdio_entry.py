@@ -95,6 +95,11 @@ class TestStdioEntry:
             with pytest.raises(BaseException):
                 await stdio_mod.async_main()
 
+    async def test_base_exceptiongroup_win32_flush_is_graceful(self, stdio_mod):
+        beg = BaseExceptionGroup("grp", [OSError(22, "flush")])
+        with _patched(stdio_mod, run_side_effect=beg), patch.object(sys, "platform", "win32"):
+            await stdio_mod.async_main()
+
     def test_sync_main_wraps_async(self, stdio_mod):
         """The console-script entry runs the async main via asyncio.run (#50)."""
         with patch.object(stdio_mod, "async_main", AsyncMock(return_value=None)) as am:
