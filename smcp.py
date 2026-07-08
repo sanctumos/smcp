@@ -57,48 +57,64 @@ metrics: Dict[str, Any] = {
     "tool_calls_error": 0,
 }
 
-# Configure logging
-def setup_logging():
-    """Set up logging configuration."""
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-    
-    # Create formatters
+# Logging is configured explicitly at server start (configure_logging), never at
+# import time — importing this module must have no filesystem or root-logger
+# side effects (issue #52).
+_logging_configured = False
+
+
+def configure_logging(log_dir: Optional[str] = None) -> logging.Logger:
+    """Configure process logging (console + rotating file).
+
+    Call this from the server entrypoint (``async_main``), **not** at import time,
+    so that importing this module creates no directories and attaches no handlers
+    to the root logger. Idempotent: repeated calls do not stack handlers. The log
+    directory is taken from ``log_dir``, else the ``MCP_LOG_DIR`` env var, else
+    ``logs`` (relative to the working directory).
+    """
+    global _logging_configured
+    if _logging_configured:
+        return logging.getLogger(__name__)
+
+    target = log_dir or os.getenv("MCP_LOG_DIR") or "logs"
+    log_path = Path(target)
+    log_path.mkdir(parents=True, exist_ok=True)
+
     detailed_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
     )
     simple_formatter = logging.Formatter(
         '%(asctime)s - %(levelname)s - %(message)s'
     )
-    
-    # File handler with rotation
+
     file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "mcp_server.log",
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
+        log_path / "mcp_server.log",
+        maxBytes=10 * 1024 * 1024,  # 10MB
+        backupCount=5,
     )
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(detailed_formatter)
-    
-    # Console handler
+
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(simple_formatter)
-    
-    # Configure root logger
+
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
     root_logger.addHandler(file_handler)
     root_logger.addHandler(console_handler)
-    
+
     # Reduce noise from some libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("uvicorn").setLevel(logging.INFO)
-    
+
+    _logging_configured = True
     return logging.getLogger(__name__)
 
-logger = setup_logging()
+
+# Import-time: inherit config only; no side effects.
+logger = logging.getLogger(__name__)
 
 
 def _load_letta_dotenv() -> None:
@@ -1212,6 +1228,7 @@ def build_app(sse_transport, auth_config: Optional[AuthConfig] = None):
 
 async def async_main():
     """Main entry point."""
+    configure_logging()
     load_letta_env_vars()
     args = parse_arguments()
 

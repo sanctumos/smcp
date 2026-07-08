@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Logging is configured at server start, not at import** (issue #52). Importing `smcp` no longer creates a `logs/` directory or attaches handlers to the root logger. `setup_logging()` is replaced by an idempotent `configure_logging(log_dir=None)` called from `async_main()`; the log directory is configurable via `MCP_LOG_DIR` (default `logs`). STDIO transport is unaffected.
 - **Core is product-agnostic: argument-alias coalescing is now generic** (issue #44). `_coalesce_tool_argument_aliases` no longer hardcodes any plugin's field names (previously `payload_json` / `catering_invoice_id` / `invoice_command`). It collapses hyphen/underscore key variants to a single canonical key for *any* parameter, so new plugins plug in with zero core edits.
 
 ### Documentation
