@@ -164,9 +164,22 @@ class TestArgsHostServer:
         assert smcp_module.resolve_host(args) == "10.0.0.5"
 
     def test_create_server(self):
-        srv = smcp_module.create_server("127.0.0.1", 8000)
+        srv = smcp_module.create_server()
         assert srv is not None
         assert srv.name == "sanctum-letta-mcp"
+        # #49: reports the real package version, not a hardcoded "1.0.0".
+        assert srv.version == smcp_module._package_version()
+        assert srv.version != "1.0.0"
+
+    def test_package_version_matches_init(self):
+        # #49: _package_version reads __version__ from the sibling __init__.py.
+        from pathlib import Path as _P
+        init = (_P(smcp_module.__file__).resolve().parent / "__init__.py").read_text()
+        expected = next(
+            ln.split("=", 1)[1].strip().strip("\"'")
+            for ln in init.splitlines() if ln.strip().startswith("__version__")
+        )
+        assert smcp_module._package_version() == expected
 
     def test_get_plugin_help_exception(self):
         with patch.object(smcp_module.subprocess, "run", side_effect=OSError("spawn fail")):
@@ -185,7 +198,7 @@ class TestArgsHostServer:
 @pytest.mark.unit
 class TestRegisterHandlers:
     async def test_handlers_and_connect_skip(self):
-        real_server = smcp_module.create_server("stdio", 0)
+        real_server = smcp_module.create_server()
         describe = {
             "plugin": {"name": "toy", "version": "1.0.0"},
             "commands": [

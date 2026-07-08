@@ -60,7 +60,7 @@ async def main():
         # This must happen before stdio_server context to avoid stdout pollution
         # Any errors here will be logged to stderr only
         try:
-            server = smcp.create_server("stdio", 0)
+            server = smcp.create_server()
             smcp.register_plugin_tools(server)
         except Exception as e:
             # Log plugin registration errors to stderr

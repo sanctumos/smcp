@@ -674,8 +674,9 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                                 error_msg += f" Stderr: {stderr_text[:200]}"
                             metrics["tool_calls_error"] += 1
                             return error_msg
-                    except:
-                        pass
+                    except Exception as partial_err:
+                        # Best-effort partial-output read; don't mask the timeout.
+                        logger.debug("Failed to read partial output on timeout: %s", partial_err)
                 raise  # Re-raise to be caught by outer handler
         except asyncio.TimeoutError:
             # Kill the process if it times out
@@ -706,7 +707,9 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                         error_msg = error_data["error"]
                     else:
                         error_msg = stdout.decode().strip()
-                except:
+                except Exception as parse_err:
+                    # Non-JSON stdout: fall back to raw text / return code.
+                    logger.debug("Plugin stdout was not JSON error: %s", parse_err)
                     error_msg = stdout.decode().strip() or f"Plugin exited with code {process.returncode}"
             else:
                 error_msg = f"Plugin exited with code {process.returncode} (no output)"
@@ -926,12 +929,29 @@ def register_plugin_tools(server: Server):
             return [TextContent(type="text", text=error_msg)]
 
 
-def create_server(host: str, port: int) -> Server:
-    """Create and configure the MCP server instance."""
-    # Create base MCP server (not FastMCP)
-    server = Server(name="sanctum-letta-mcp", version="1.0.0")
-    
-    return server
+def _package_version() -> str:
+    """Best-effort read of the package version from the sibling ``__init__.py``.
+
+    File-based rather than importing the package: ``smcp.py`` doubles as a
+    top-level module and the package import path is ambiguous (see #50). Falls
+    back to ``"0.0.0"`` if the version can't be read.
+    """
+    try:
+        init_path = Path(__file__).resolve().parent / "__init__.py"
+        for line in init_path.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("__version__"):
+                return line.split("=", 1)[1].strip().strip("\"'")
+    except Exception:  # pragma: no cover - defensive, version read is best-effort
+        pass
+    return "0.0.0"
+
+
+def create_server() -> Server:
+    """Create and configure the MCP server instance.
+
+    Reports the real package version (issue #49) rather than a hardcoded literal.
+    """
+    return Server(name="sanctum-letta-mcp", version=_package_version())
 
 
 def parse_arguments():
@@ -1224,7 +1244,7 @@ async def async_main():
     
     # Create MCP server
     global server
-    server = create_server(host, args.port)
+    server = create_server()
     
     # Register plugin tools
     register_plugin_tools(server)
