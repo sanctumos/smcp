@@ -21,8 +21,6 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,7 +28,8 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = ">=3.8"
+# The mcp dependency requires >=3.10, so that is the real floor (see #48/#51).
+requires-python = ">=3.10"
 dependencies = [
     "aiohttp>=3.8.0",
     "aiohttp-cors>=0.7.0",
@@ -65,42 +64,7 @@ Repository = "https://github.com/sanctumos/smcp"
 Issues = "https://github.com/sanctumos/smcp/issues"
 Changelog = "https://github.com/sanctumos/smcp/blob/master/CHANGELOG.md"
 
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "-ra -q --strict-markers --strict-config"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "e2e: marks tests as end-to-end tests",
-]
-asyncio_mode = "auto"
-timeout = 60
-
-[tool.coverage.run]
-source = ["smcp.py"]
-omit = [
-    "*/tests/*",
-    "*/test_*",
-    "*/__pycache__/*",
-    "*/venv/*",
-    "*/env/*",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
-    "class .*\\bProtocol\\):",
-    "@(abc\\.)?abstractmethod",
-]
+# NOTE: pytest and coverage configuration live in `pytest.ini` and `.coveragerc`
+# (the single source of truth). Do not re-add [tool.pytest.ini_options] or
+# [tool.coverage.*] here — pytest reads pytest.ini first and the duplicate blocks
+# silently drift (issue #51).
