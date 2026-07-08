@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Plugin subprocess timeout is now operator-configurable** (issue #41, mirrors AnimusUNO #10) via `MCP_PLUGIN_TIMEOUT` (seconds) and the `--plugin-timeout` CLI flag (flag takes precedence). **The default is now no timeout** (previously a hardcoded 300s), so long-running plugin operations are not cut off; set a value to protect against hung processes. On timeout the child is terminated (`terminate()` → `kill()`) and a structured timeout error is returned.
 - **Broca MCP plugin** (`broca__*` tools) **removed from this repository**. It ships with **[sanctumos/broca](https://github.com/sanctumos/broca)** under `smcp/broca/`. Set `MCP_PLUGINS_DIR` to that repo’s `smcp/` directory (or symlink `broca` into your existing plugins root). See `plugins/README.md`.
 
 ## [4.0.0] - 2025-01-XX

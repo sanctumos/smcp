@@ -109,15 +109,15 @@ class TestExecutePluginToolReal:
 
     async def test_timeout_path(self, real_plugin):
         """Force the outer timeout handler by making wait_for raise TimeoutError."""
-        real_wait_for = asyncio.wait_for
-
         async def fake_wait_for(aw, timeout):
             # Cancel the underlying coroutine and simulate a timeout
             if asyncio.iscoroutine(aw):
                 aw.close()
             raise asyncio.TimeoutError()
 
-        with patch.object(smcp_module.asyncio, "wait_for", side_effect=fake_wait_for):
+        # A configured timeout is required for the wait_for path to be taken.
+        with patch.dict(os.environ, {"MCP_PLUGIN_TIMEOUT": "5"}), \
+             patch.object(smcp_module.asyncio, "wait_for", side_effect=fake_wait_for):
             result = await smcp_module.execute_plugin_tool("toy__echo", {"name": "x"})
         assert "timed out" in result
 

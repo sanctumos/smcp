@@ -410,6 +410,26 @@ def _boolean_is_flag_style(param_spec: Optional[Dict[str, Any]]) -> bool:
     return False
 
 
+def _resolve_plugin_timeout() -> Optional[float]:
+    """Resolve the plugin execution timeout in seconds (issue #41).
+
+    Reads MCP_PLUGIN_TIMEOUT (set directly or from the --plugin-timeout CLI flag).
+    Unset, empty, ``0``, negative, or unparseable => ``None`` (no timeout), the
+    default, so long-running plugin operations are not cut off.
+    """
+    raw = os.getenv("MCP_PLUGIN_TIMEOUT")
+    if raw is None or str(raw).strip() == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        logger.warning("Invalid MCP_PLUGIN_TIMEOUT=%r; running with no timeout.", raw)
+        return None
+    if value <= 0:
+        return None
+    return value
+
+
 async def _terminate_process(process, grace: float = 5.0) -> None:
     """Terminate a still-running subprocess: SIGTERM, then SIGKILL after a grace.
 
@@ -500,10 +520,10 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         if logger.level <= logging.INFO:
             logger.info(f"Executing plugin command: {' '.join(cmd_args)}")
         
-        # Execute the command with timeout
-        # Default timeout: 5 minutes (300 seconds) for long-running operations like IMAP connections
-        # This prevents indefinite hangs while allowing reasonable time for network operations
-        timeout_seconds = 300
+        # Execute the command with an operator-configurable timeout (issue #41).
+        # Default is no timeout (None) so long-running plugin operations are not
+        # cut off; set MCP_PLUGIN_TIMEOUT or --plugin-timeout to enforce one.
+        timeout_seconds = _resolve_plugin_timeout()
         
         process = None
         try:
@@ -557,10 +577,13 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                 return stdout_data, stderr_data
             
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    read_output(),
-                    timeout=timeout_seconds
-                )
+                if timeout_seconds is None:
+                    stdout, stderr = await read_output()
+                else:
+                    stdout, stderr = await asyncio.wait_for(
+                        read_output(),
+                        timeout=timeout_seconds
+                    )
             except asyncio.TimeoutError:
                 # Process is hanging - kill it and capture what we have
                 if process.returncode is None:
@@ -879,6 +902,14 @@ Examples:
         default=os.getenv("MCP_HOST", "127.0.0.1"),
         help="Host to bind to (default: 127.0.0.1 or MCP_HOST env var)"
     )
+
+    parser.add_argument(
+        "--plugin-timeout",
+        type=float,
+        default=None,
+        help="Seconds before a plugin subprocess is terminated (default: no timeout; "
+             "also settable via MCP_PLUGIN_TIMEOUT). 0 or negative means no timeout."
+    )
     
     return parser.parse_args()
 
@@ -1092,6 +1123,10 @@ async def async_main():
     """Main entry point."""
     load_letta_env_vars()
     args = parse_arguments()
+
+    # --plugin-timeout takes precedence over the environment for this process.
+    if getattr(args, "plugin_timeout", None) is not None:
+        os.environ["MCP_PLUGIN_TIMEOUT"] = str(args.plugin_timeout)
 
     # Determine host binding
     host = resolve_host(args)

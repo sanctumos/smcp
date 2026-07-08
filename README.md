@@ -152,6 +152,7 @@ When deployed via the master Animus installer, SMCP is automatically:
 | `MCP_API_KEYS` | — | Comma-separated list of accepted keys (for rotation / multiple clients). Merged with `MCP_API_KEY`. |
 | `MCP_AUTH_DISABLED` | `0` | Explicit escape hatch: `1` disables auth **and** the external-bind guard (logged loudly). |
 | `MCP_AUTH_ALLOW_LOOPBACK` | `1` | When `1`, loopback (`127.0.0.1`/`::1`) clients skip the key check. Set `0` (or use `--require-auth`) to require the key even locally. |
+| `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated. Unset / `0` / negative means **no timeout** (long-running operations are allowed). Overridden by `--plugin-timeout`. |
 | `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env` (same file Letta uses); default URL is `http://127.0.0.1:8284`. |
 | `LETTA_SERVER_PASSWORD` | — | Bearer token for Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
 | `LETTA_AGENT_ID` | — | Optional. If set, only this agent's env vars are loaded; otherwise all agents' vars are merged. |
