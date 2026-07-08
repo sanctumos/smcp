@@ -189,21 +189,25 @@ class TestToolExecution:
         mock_process.wait = AsyncMock(return_value=None)
         mock_create_subprocess.return_value = AsyncMock(return_value=mock_process)
         with patch.object(smcp_module, "plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await execute_plugin_tool("test_plugin__test_command", {"arg1": "value1"})
-        assert result == "Error: Error output"
+            with pytest.raises(smcp_module.ToolError) as ei:
+                await execute_plugin_tool("test_plugin__test_command", {"arg1": "value1"})
+        assert "Error output" in ei.value.message
+        assert ei.value.code == "plugin_error"
     
     async def test_execute_plugin_tool_invalid_name(self):
         """Test tool execution with invalid tool name."""
-        result = await execute_plugin_tool("invalid_tool_name", {})
-        
-        assert "Invalid tool name format" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await execute_plugin_tool("invalid_tool_name", {})
+        assert "Invalid tool name format" in ei.value.message
+        assert ei.value.code == "invalid_tool_name"
     
     async def test_execute_plugin_tool_nonexistent_plugin(self):
         """Test tool execution with nonexistent plugin."""
         with patch.object(smcp_module, "plugin_registry", {}):
-            result = await execute_plugin_tool("nonexistent_plugin.command", {})
-        
-        assert "Plugin 'nonexistent_plugin' not found" in result
+            with pytest.raises(smcp_module.ToolError) as ei:
+                await execute_plugin_tool("nonexistent_plugin.command", {})
+        assert "Plugin 'nonexistent_plugin' not found" in ei.value.message
+        assert ei.value.code == "plugin_not_found"
     
     @patch.object(smcp_module, "asyncio")
     async def test_execute_plugin_tool_exception(self, mock_subprocess):
@@ -211,9 +215,10 @@ class TestToolExecution:
         mock_subprocess.side_effect = Exception("Subprocess error")
         
         with patch.object(smcp_module, "plugin_registry", {"test_plugin": {"path": "/path/to/cli.py"}}):
-            result = await execute_plugin_tool("test_plugin.test_command", {})
-        
-        assert "Error executing tool" in result
+            with pytest.raises(smcp_module.ToolError) as ei:
+                await execute_plugin_tool("test_plugin.test_command", {})
+        assert "Error executing tool" in ei.value.message
+        assert ei.value.code == "internal_error"
 
 
 @pytest.mark.unit

@@ -64,22 +64,27 @@ def err_plugin(tmp_path):
 @pytest.mark.unit
 class TestErrorRoundTrip:
     async def test_structured_json_error_round_trips(self, err_plugin):
-        result = await smcp_module.execute_plugin_tool("errp__errjson", {})
-        assert "specific plugin failure" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("errp__errjson", {})
+        assert "specific plugin failure" in ei.value.message
+        assert ei.value.code == "plugin_error"
 
     async def test_json_without_error_key_returns_raw(self, err_plugin):
-        result = await smcp_module.execute_plugin_tool("errp__errjson_nokey", {})
-        assert "no error key here" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("errp__errjson_nokey", {})
+        assert "no error key here" in ei.value.message
 
     async def test_raw_text_error_not_empty(self, err_plugin):
-        result = await smcp_module.execute_plugin_tool("errp__errraw", {})
-        assert "plain text failure" in result
-        assert result.strip() != ""
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("errp__errraw", {})
+        assert "plain text failure" in ei.value.message
+        assert ei.value.message.strip() != ""
 
     async def test_no_output_falls_back_to_code_not_empty(self, err_plugin):
-        result = await smcp_module.execute_plugin_tool("errp__errsilent", {})
-        assert "exited with code 4" in result
-        assert result.strip() != ""
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("errp__errsilent", {})
+        assert "exited with code 4" in ei.value.message
+        assert ei.value.code == "plugin_error"
 
     async def test_success_passthrough(self, err_plugin):
         result = await smcp_module.execute_plugin_tool("errp__ok", {})

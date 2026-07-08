@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- **Structured tool error/result contract** (issue #53): tool failures are now machine-distinguishable from success. `execute_plugin_tool` raises a typed `ToolError` (stable `code` + `message`) on every failure path, and the `call_tool` handler returns an MCP `CallToolResult` with `isError=true` and `structuredContent.error = {code, message}`. Codes: `invalid_tool_name`, `plugin_not_found`, `plugin_error`, `timeout`, `internal_error`. Plugins' structured `{"error": ...}` JSON still round-trips (as the `plugin_error` message). See the API reference for the condition→code table.
+
 ### Fixed
 
 - **`create_server()` reports the real package version and drops dead params** (issue #49): the server no longer advertises a hardcoded `1.0.0`; it derives the version from the package `__version__`. Removed the unused `host`/`port` parameters. Narrowed two bare `except:` clauses in `execute_plugin_tool` to `except Exception:` (with debug logging) so `KeyboardInterrupt`/`SystemExit` are no longer swallowed.

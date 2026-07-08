@@ -89,24 +89,30 @@ class TestExecutePluginToolReal:
         assert data["tag"] == ["a", "b"]
 
     async def test_error_json_stdout(self, real_plugin):
-        result = await smcp_module.execute_plugin_tool("toy__failjson", {})
-        assert "boom-json" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("toy__failjson", {})
+        assert "boom-json" in ei.value.message
+        assert ei.value.code == "plugin_error"
 
     async def test_error_raw_stdout(self, real_plugin):
-        result = await smcp_module.execute_plugin_tool("toy__failraw", {})
-        assert "raw failure text" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("toy__failraw", {})
+        assert "raw failure text" in ei.value.message
 
     async def test_error_no_output(self, real_plugin):
-        result = await smcp_module.execute_plugin_tool("toy__silentfail", {})
-        assert "exited with code 3" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("toy__silentfail", {})
+        assert "exited with code 3" in ei.value.message
 
     async def test_legacy_dot_separator(self, real_plugin):
         result = await smcp_module.execute_plugin_tool("toy.echo", {"name": "dot"})
         assert json.loads(result)["name"] == "dot"
 
     async def test_no_separator_invalid(self):
-        result = await smcp_module.execute_plugin_tool("noseparator", {})
-        assert "Invalid tool name format" in result
+        with pytest.raises(smcp_module.ToolError) as ei:
+            await smcp_module.execute_plugin_tool("noseparator", {})
+        assert "Invalid tool name format" in ei.value.message
+        assert ei.value.code == "invalid_tool_name"
 
     async def test_timeout_path(self, real_plugin):
         """Force the outer timeout handler by making wait_for raise TimeoutError."""
@@ -119,8 +125,10 @@ class TestExecutePluginToolReal:
         # A configured timeout is required for the wait_for path to be taken.
         with patch.dict(os.environ, {"MCP_PLUGIN_TIMEOUT": "5"}), \
              patch.object(smcp_module.asyncio, "wait_for", side_effect=fake_wait_for):
-            result = await smcp_module.execute_plugin_tool("toy__echo", {"name": "x"})
-        assert "timed out" in result
+            with pytest.raises(smcp_module.ToolError) as ei:
+                await smcp_module.execute_plugin_tool("toy__echo", {"name": "x"})
+        assert "timed out" in ei.value.message
+        assert ei.value.code == "timeout"
 
 
 # --- parse_arguments / resolve_host / create_server ------------------------
@@ -240,15 +248,29 @@ class TestRegisterHandlers:
         assert "toy__connect" not in names
         assert "toy__disconnect" not in names
 
-        # call_tool handler success
+        # call_tool handler success -> normal content (isError=False)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(return_value="ok-result")):
             out = await captured["call"]("toy__echo", {})
         assert out[0].text == "ok-result"
 
-        # call_tool handler error path
+        # call_tool handler unexpected error -> structured CallToolResult(isError=True)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(side_effect=RuntimeError("bad"))):
             out = await captured["call"]("toy__echo", {})
-        assert "Tool execution failed" in out[0].text
+        assert isinstance(out, smcp_module.CallToolResult)
+        assert out.isError is True
+        assert "Tool execution failed" in out.content[0].text
+        assert out.structuredContent["error"]["code"] == "internal_error"
+
+        # call_tool handler structured ToolError -> code preserved
+        with patch.object(
+            smcp_module, "execute_plugin_tool",
+            new=AsyncMock(side_effect=smcp_module.ToolError("plugin_error", "boom")),
+        ):
+            out = await captured["call"]("toy__echo", {})
+        assert isinstance(out, smcp_module.CallToolResult)
+        assert out.isError is True
+        assert out.structuredContent["error"]["code"] == "plugin_error"
+        assert out.content[0].text == "boom"
 
 
 # --- Letta env loading extra branches --------------------------------------

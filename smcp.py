@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Sequence
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
-from mcp.types import TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool
 
 import governor
 
@@ -560,8 +560,40 @@ async def _terminate_process(process, grace: float = 5.0) -> None:
         pass
 
 
+class ToolError(Exception):
+    """A structured tool-execution failure (issue #53).
+
+    Carries a stable ``code`` so clients can branch programmatically instead of
+    string-matching, plus a human-readable ``message``. Raised by
+    ``execute_plugin_tool`` on every failure path and mapped by the call_tool
+    handler onto an MCP ``CallToolResult(isError=True)``.
+
+    Codes: ``invalid_tool_name``, ``plugin_not_found``, ``plugin_error``,
+    ``timeout``, ``internal_error``.
+    """
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(message)
+
+
+def _tool_error_result(code: str, message: str) -> CallToolResult:
+    """Build an MCP error result that is machine-distinguishable from success."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)],
+        isError=True,
+        structuredContent={"error": {"code": code, "message": message}},
+    )
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
-    """Execute a plugin tool with the given arguments."""
+    """Execute a plugin tool with the given arguments.
+
+    Returns the plugin's stdout string on success; raises :class:`ToolError`
+    (with a stable ``code``) on any failure so the caller can surface a
+    structured MCP error (issue #53).
+    """
     try:
         arguments = _coalesce_tool_argument_aliases(arguments)
         # Parse tool name to get plugin and command
@@ -570,16 +602,25 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         if '__' in tool_name:
             parts = tool_name.split('__', 1)  # Split on double underscore
             if len(parts) != 2:
-                return f"Invalid tool name format: {tool_name}. Expected 'plugin__command'"
+                metrics["tool_calls_error"] += 1
+                raise ToolError(
+                    "invalid_tool_name",
+                    f"Invalid tool name format: {tool_name}. Expected 'plugin__command'",
+                )
             plugin_name, command = parts
         elif '.' in tool_name:
             # Legacy dot format for backward compatibility
             plugin_name, command = tool_name.split('.', 1)
         else:
-            return f"Invalid tool name format: {tool_name}. Expected 'plugin__command' or 'plugin.command'"
+            metrics["tool_calls_error"] += 1
+            raise ToolError(
+                "invalid_tool_name",
+                f"Invalid tool name format: {tool_name}. Expected 'plugin__command' or 'plugin.command'",
+            )
         
         if plugin_name not in plugin_registry:
-            return f"Plugin '{plugin_name}' not found"
+            metrics["tool_calls_error"] += 1
+            raise ToolError("plugin_not_found", f"Plugin '{plugin_name}' not found")
         
         plugin_info = plugin_registry[plugin_name]
         cli_path = plugin_info["path"]
@@ -679,27 +720,29 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                         await asyncio.wait_for(process.wait(), timeout=5.0)
                     except asyncio.TimeoutError:
                         pass
-                # Try to get any partial output
+                # Try to get any partial output (best effort; must not mask the timeout).
+                partial_msg = None
                 if process.stdout:
                     try:
                         partial_stdout = await asyncio.wait_for(process.stdout.read(), timeout=0.1)
                         if partial_stdout:
                             stderr_text = stderr.decode('utf-8', errors='replace') if stderr else ''
-                            error_msg = f"Plugin command timed out. Partial output: {partial_stdout.decode('utf-8', errors='replace')[:200]}"
+                            partial_msg = f"Plugin command timed out. Partial output: {partial_stdout.decode('utf-8', errors='replace')[:200]}"
                             if stderr_text:
-                                error_msg += f" Stderr: {stderr_text[:200]}"
-                            metrics["tool_calls_error"] += 1
-                            return error_msg
+                                partial_msg += f" Stderr: {stderr_text[:200]}"
                     except Exception as partial_err:
-                        # Best-effort partial-output read; don't mask the timeout.
                         logger.debug("Failed to read partial output on timeout: %s", partial_err)
+                if partial_msg is not None:
+                    metrics["tool_calls_error"] += 1
+                    raise ToolError("timeout", partial_msg)
                 raise  # Re-raise to be caught by outer handler
         except asyncio.TimeoutError:
             # Kill the process if it times out
             await _terminate_process(process)
-            error_msg = f"Plugin command timed out after {timeout_seconds} seconds"
             metrics["tool_calls_error"] += 1
-            return error_msg
+            raise ToolError(
+                "timeout", f"Plugin command timed out after {timeout_seconds} seconds"
+            )
         except asyncio.CancelledError:
             # Client disconnected / request cancelled — never orphan the child (#18).
             await _terminate_process(process)
@@ -730,13 +773,17 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
             else:
                 error_msg = f"Plugin exited with code {process.returncode} (no output)"
             metrics["tool_calls_error"] += 1
-            return f"Error: {error_msg}"
-            
+            raise ToolError("plugin_error", error_msg)
+
+    except ToolError:
+        # Already structured and counted; propagate to the handler.
+        raise
     except Exception as e:
+        # asyncio.CancelledError is BaseException and propagates past this guard.
         error_msg = f"Error executing tool {tool_name}: {e}"
         logger.error(error_msg)
         metrics["tool_calls_error"] += 1
-        return error_msg
+        raise ToolError("internal_error", error_msg)
 
 
 def parameter_spec_to_json_schema(parameters: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -939,10 +986,13 @@ def register_plugin_tools(server: Server):
             if logger.level <= logging.INFO:
                 logger.info(f"Tool result: {result[:200]}...")
             return [TextContent(type="text", text=str(result))]
+        except ToolError as te:
+            # Structured failure (already counted in execute_plugin_tool).
+            return _tool_error_result(te.code, te.message)
         except Exception as e:
-            error_msg = f"Tool execution failed: {str(e)}"
+            # Unexpected failure at the handler boundary.
             metrics["tool_calls_error"] += 1
-            return [TextContent(type="text", text=error_msg)]
+            return _tool_error_result("internal_error", f"Tool execution failed: {str(e)}")
 
 
 def _package_version() -> str:

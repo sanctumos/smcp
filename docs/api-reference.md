@@ -244,6 +244,38 @@ All messages follow the JSON-RPC 2.0 specification:
 }
 ```
 
+### Tool result contract (success vs. error)
+
+Tool execution returns a machine-distinguishable success/failure result so callers can branch programmatically instead of string-matching (issue #53).
+
+- **Success**: `result.isError` is `false` (or absent) and `result.content` carries the plugin's output.
+- **Failure**: `result.isError` is `true`, `result.content[0].text` holds a human-readable message, and `result.structuredContent.error` carries a stable `code` and `message`.
+
+**Error response**:
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [{ "type": "text", "text": "Plugin 'nope' not found" }],
+    "isError": true,
+    "structuredContent": { "error": { "code": "plugin_not_found", "message": "Plugin 'nope' not found" } }
+  }
+}
+```
+
+**Error codes** (condition → `code`):
+
+| Condition | `code` |
+|-----------|--------|
+| Malformed tool name (not `plugin__command` / `plugin.command`) | `invalid_tool_name` |
+| Unknown plugin | `plugin_not_found` |
+| Plugin exited nonzero (structured `{"error": ...}` JSON or raw stdout preserved in `message`) | `plugin_error` |
+| Plugin execution exceeded the configured timeout | `timeout` |
+| Unexpected internal failure | `internal_error` |
+
+A plugin that prints `{"error": "..."}` and exits nonzero has that message surfaced as the `plugin_error` `message` (preserving the #42 round-trip behavior).
+
 ## Error Codes
 
 ### Standard JSON-RPC 2.0 Errors
