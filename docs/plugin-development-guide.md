@@ -1,6 +1,6 @@
 # Plugin Development Guide
 
-A comprehensive guide for developing plugins for the Animus Letta MCP Server.
+A comprehensive guide for developing plugins for the Sanctum Letta MCP Server.
 
 ## Overview
 
@@ -11,7 +11,7 @@ Plugins are the core of the MCP server's extensibility. Each plugin provides too
 ### Directory Structure
 
 ```
-smcp/plugins/
+plugins/
 ├── your_plugin/
 │   ├── __init__.py          # Plugin metadata (optional)
 │   ├── cli.py              # Main plugin interface (required)
@@ -82,8 +82,8 @@ For backward compatibility, SMCP can still parse commands from the `--help` outp
 ### Step 1: Create Plugin Directory
 
 ```bash
-mkdir -p smcp/plugins/my_first_plugin
-cd smcp/plugins/my_first_plugin
+mkdir -p plugins/my_first_plugin
+cd plugins/my_first_plugin
 ```
 
 ### Step 2: Create the CLI Interface
@@ -107,7 +107,7 @@ from typing import Dict, Any
 def main():
     """Main entry point for the plugin CLI."""
     parser = argparse.ArgumentParser(
-        description="My First Plugin - A sample plugin for Animus Letta MCP"
+        description="My First Plugin - A sample plugin for Sanctum Letta MCP"
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
@@ -226,7 +226,7 @@ def get_plugin_description() -> Dict[str, Any]:
         "plugin": {
             "name": "my_first_plugin",
             "version": "1.0.0",
-            "description": "My First Plugin - A sample plugin for Animus Letta MCP"
+            "description": "My First Plugin - A sample plugin for Sanctum Letta MCP"
         },
         "commands": [
             {
@@ -283,7 +283,7 @@ def get_plugin_description() -> Dict[str, Any]:
 def main():
     """Main entry point for the plugin CLI."""
     parser = argparse.ArgumentParser(
-        description="My First Plugin - A sample plugin for Animus Letta MCP"
+        description="My First Plugin - A sample plugin for Sanctum Letta MCP"
     )
     
     # Add --describe flag
@@ -576,16 +576,19 @@ async def test_plugin_integration():
 
 ## Plugin Examples
 
-### BotFather Plugin
+> The two snippets below are **illustrative patterns**, not plugins shipped in this repo. For
+> runnable, tested examples see the bundled `plugins/demo_math/` and `plugins/demo_text/`.
 
-The BotFather plugin demonstrates integration with external APIs:
+### Example: external-API plugin
+
+This pattern demonstrates integration with an external API (here, a chat/messaging API):
 
 ```python
 #!/usr/bin/env python3
 """
-BotFather Plugin
+Messaging Plugin (illustrative)
 
-Telegram Bot API integration for Animus Letta MCP.
+External messaging API integration for Sanctum Letta MCP.
 """
 
 import argparse
@@ -631,16 +634,16 @@ def execute_send_message(message: str, chat_id: str) -> Dict[str, Any]:
     }
 ```
 
-### DevOps Plugin
+### Example: operations plugin
 
-The DevOps plugin shows how to handle deployment operations:
+This pattern shows how to handle deployment / operations commands:
 
 ```python
 #!/usr/bin/env python3
 """
-DevOps Plugin
+Operations Plugin (illustrative)
 
-Deployment and infrastructure management for Animus Letta MCP.
+Deployment and infrastructure management for Sanctum Letta MCP.
 """
 
 import argparse
@@ -691,7 +694,7 @@ def execute_rollback(app_name: str, version: str) -> Dict[str, Any]:
 
 ### Local Development
 
-1. Place your plugin in `smcp/plugins/your_plugin/`
+1. Place your plugin in `plugins/your_plugin/`
 2. Make sure `cli.py` is executable
 3. Restart the MCP server
 4. Your tools will be automatically available
@@ -769,6 +772,8 @@ def execute_rollback(app_name: str, version: str) -> Dict[str, Any]:
 
 ---
 
-**Need Help?** Visit [animus.uno](https://animus.uno) or follow [@animusuno](https://x.com/animusuno) for support.
+**Need Help?** Visit [sanctumos.org](https://sanctumos.org) or open an issue at
+[github.com/sanctumos/smcp/issues](https://github.com/sanctumos/smcp/issues).
 
-> **Note**: This repository has been graduated to **Animus Core Module** status. Visit [animus.uno](https://animus.uno) for more information. 
+> **Note**: This is the Sanctum edition (`sanctumos/smcp`), a SanctumOS core module. An Animus-branded
+> fork lives at `AnimusUNO/smcp`. 

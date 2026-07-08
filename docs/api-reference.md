@@ -1,10 +1,10 @@
 # API Reference
 
-Complete API reference for the Animus Letta MCP Server.
+Complete API reference for the Sanctum Letta MCP Server.
 
 ## Overview
 
-The Animus Letta MCP Server implements the Model Context Protocol (MCP) specification using Server-Sent Events (SSE) for real-time communication and HTTP POST for request/response handling.
+The Sanctum Letta MCP Server implements the Model Context Protocol (MCP) specification using Server-Sent Events (SSE) for real-time communication and HTTP POST for request/response handling.
 
 ## Endpoints
 
@@ -136,8 +136,8 @@ All messages follow the JSON-RPC 2.0 specification:
       }
     },
     "serverInfo": {
-      "name": "animus-letta-mcp",
-      "version": "3.0.0"
+      "name": "sanctum-letta-mcp",
+      "version": "3.0.3"
     }
   }
 }
@@ -190,17 +190,19 @@ All messages follow the JSON-RPC 2.0 specification:
         }
       },
       {
-        "name": "botfather.send-message",
-        "description": "Send a message via Telegram Bot API",
+        "name": "demo_math.calculate",
+        "description": "Perform a basic arithmetic operation",
         "inputSchema": {
           "type": "object",
           "properties": {
-            "message": {
+            "operation": {
               "type": "string",
-              "description": "Message to send"
-            }
+              "description": "add, subtract, multiply, or divide"
+            },
+            "a": {"type": "number", "description": "First operand"},
+            "b": {"type": "number", "description": "Second operand"}
           },
-          "required": ["message"]
+          "required": ["operation", "a", "b"]
         }
       }
     ]
@@ -235,7 +237,7 @@ All messages follow the JSON-RPC 2.0 specification:
     "content": [
       {
         "type": "text",
-        "text": "{\"status\":\"healthy\",\"plugins\":2,\"plugin_names\":[\"botfather\",\"devops\"]}"
+        "text": "{\"status\":\"healthy\",\"plugins\":2,\"plugin_names\":[\"demo_math\",\"demo_text\"]}"
       }
     ]
   }
@@ -306,16 +308,16 @@ Tool responses are wrapped in content blocks:
 
 ### Plugin Discovery
 
-The server discovers plugins by scanning the plugin directory (default: `smcp/plugins/`) for subdirectories containing a `cli.py` file. Each plugin directory represents a plugin namespace.
+The server discovers plugins by scanning the plugin directory (default: `plugins/`, next to `smcp.py`) for subdirectories containing a `cli.py` file. Each plugin directory represents a plugin namespace.
 
 ### Plugin Directory Structure
 
 ```
-smcp/plugins/
-├── botfather/
+plugins/
+├── demo_math/
 │   ├── __init__.py
 │   └── cli.py
-├── devops/
+├── demo_text/
 │   ├── __init__.py
 │   └── cli.py
 └── custom-plugin/
@@ -333,16 +335,16 @@ You can centralize plugins in a designated location and use symlinks for discove
 
 ```
 # Central plugin repository
-/opt/animus/plugins/
-├── botfather/
-├── devops/
+/opt/sanctum/plugins/
+├── demo_math/
+├── demo_text/
 └── custom-plugin/
 
 # MCP server plugin directory with symlinks
-smcp/plugins/
-├── botfather -> /opt/animus/plugins/botfather
-├── devops -> /opt/animus/plugins/devops
-└── custom-plugin -> /opt/animus/plugins/custom-plugin
+plugins/
+├── demo_math -> /opt/sanctum/plugins/demo_math
+├── demo_text -> /opt/sanctum/plugins/demo_text
+└── custom-plugin -> /opt/sanctum/plugins/custom-plugin
 ```
 
 #### Benefits of Symlink Architecture
@@ -357,13 +359,13 @@ smcp/plugins/
 
 ```bash
 # Create symlink to centralized plugin
-ln -s /opt/animus/plugins/botfather smcp/plugins/botfather
+ln -s /opt/sanctum/plugins/demo_math plugins/demo_math
 
 # Create symlink to user's custom plugin
-ln -s /home/user/custom-plugins/my-plugin smcp/plugins/my-plugin
+ln -s /home/user/custom-plugins/my-plugin plugins/my-plugin
 
 # Create symlink to network-mounted plugin
-ln -s /mnt/network/plugins/enterprise-plugin smcp/plugins/enterprise-plugin
+ln -s /mnt/network/plugins/enterprise-plugin plugins/enterprise-plugin
 ```
 
 #### Environment Variable Override
@@ -372,11 +374,11 @@ You can override the plugin directory using the `MCP_PLUGINS_DIR` environment va
 
 ```bash
 # Use custom plugin directory
-export MCP_PLUGINS_DIR=/opt/animus/plugins
+export MCP_PLUGINS_DIR=/opt/sanctum/plugins
 python smcp.py
 
 # Or specify directly
-MCP_PLUGINS_DIR=/opt/animus/plugins python smcp.py
+MCP_PLUGINS_DIR=/opt/sanctum/plugins python smcp.py
 ```
 
 ### Plugin Execution
@@ -384,9 +386,11 @@ MCP_PLUGINS_DIR=/opt/animus/plugins python smcp.py
 Plugins are executed as subprocesses with the following characteristics:
 
 - **Isolation**: Each plugin runs in its own process
-- **Timeout**: 10-second timeout for help command execution
-- **Error Handling**: Failed plugins are logged but don't crash the server
-- **Arguments**: Plugin arguments are passed as command-line flags
+- **Discovery timeout**: plugin `--describe` / `--help` introspection at startup uses a short internal timeout so a misbehaving plugin cannot stall discovery
+- **Execution timeout**: tool calls run with **no timeout by default**; set `MCP_PLUGIN_TIMEOUT` (seconds) or `--plugin-timeout` to bound them. On timeout the child is terminated (`terminate()` → `kill()`)
+- **Cleanup on cancel**: if a client disconnects or the call is cancelled, the plugin subprocess is terminated rather than orphaned
+- **Error Handling**: Failed plugins are logged but don't crash the server; a plugin that prints `{"error": ...}` and exits nonzero has that message surfaced to the caller
+- **Arguments**: Plugin arguments are passed as command-line flags, rendered per each plugin's declared `--describe` schema (see the plugin development guide for boolean flag styles)
 
 ## SSE Events
 
@@ -426,12 +430,29 @@ For long-running operations:
 
 ## Authentication
 
-Currently, the server does not implement authentication. In production environments, consider:
+The HTTP/SSE transport supports optional shared-secret authentication. Configure one or more keys and
+clients must present a valid key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
-1. **API Keys**: Add API key validation to requests
-2. **OAuth**: Implement OAuth 2.0 flow
-3. **JWT**: Use JWT tokens for session management
-4. **Network Security**: Restrict access to trusted networks
+```bash
+export MCP_API_KEY="your-long-random-secret"
+python smcp.py --allow-external
+```
+
+Behavior:
+
+- **Fail closed on external binds:** binding `0.0.0.0` (`--allow-external`) **refuses to start** unless
+  `MCP_API_KEY` / `MCP_API_KEYS` is set, or `MCP_AUTH_DISABLED=1` is explicitly provided (logged loudly).
+- **Loopback convenience:** loopback clients (`127.0.0.1`, `::1`) bypass the key by default even when one
+  is set. Require the key locally too with `--require-auth` or `MCP_AUTH_ALLOW_LOOPBACK=0`.
+- **Unauthorized requests** receive `401 Unauthorized` with a `WWW-Authenticate: Bearer` header.
+- Auth is enforced by a raw ASGI middleware, so SSE streaming is never buffered.
+- The **STDIO transport** (`smcp_stdio.py`) has no network surface and is unaffected.
+
+Multiple keys (for rotation or multiple clients) can be supplied via `MCP_API_KEYS` (comma-separated);
+they are merged with `MCP_API_KEY`.
+
+For production also consider terminating TLS at a reverse proxy and restricting access to trusted
+networks (see the [Deployment Guide](deployment-guide.md)).
 
 ## Rate Limiting
 
@@ -443,38 +464,22 @@ The server does not currently implement rate limiting. For production use, consi
 
 ## Logging
 
-### Configuration
+The server logs to both the console and a rotating log file:
 
-Logging is configurable via environment variables. Defaults are chosen for development, with optional production-friendly JSON output and rotation.
+- **Console**: `INFO` level and above, human-readable format.
+- **File**: `logs/mcp_server.log` (created relative to the working directory), `DEBUG` level and above,
+  rotated at **10 MB** with **5** backups kept.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MCP_LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) |
-| `MCP_LOG_JSON` | `false` | Emit logs as JSON lines when `true` |
-| `MCP_LOG_FILE` | `mcp.log` | Log file path |
-| `MCP_LOG_ROTATION` | `size` | Rotation strategy: `size`, `time`, or `none` |
-| `MCP_LOG_MAX_BYTES` | `5242880` | Max bytes before rotate (size rotation) |
-| `MCP_LOG_BACKUP_COUNT` | `5` | Rotated files to keep |
-| `MCP_LOG_ROTATE_WHEN` | `midnight` | Timed rotation unit (e.g. `S`, `M`, `H`, `D`, `midnight`) |
-| `MCP_LOG_ROTATE_INTERVAL` | `1` | Timed rotation interval |
-| `MCP_DISABLE_FILE_LOG` | `false` | Disable file logging when `true` |
-
-### Formats
-
-- When `MCP_LOG_JSON=false` (default), logs use a readable text format:
+Log lines use the format:
 
 ```
-2025-07-11 15:21:07,215 - __main__ - INFO - Starting Sanctum Letta MCP Server...
-2025-07-11 15:21:07,354 - __main__ - INFO - Registered tool: botfather.click-button
+2026-07-08 15:21:07,215 - __main__ - INFO - Starting Sanctum Letta MCP Server...
+2026-07-08 15:21:07,354 - smcp - INFO - Registered tool: demo_math.calculate
 ```
 
-- When `MCP_LOG_JSON=true`, logs are newline-delimited JSON objects with keys like `timestamp`, `level`, `logger`, `message`, `module`, `function`, `line`.
-
-### Log Output
-
-- **File**: `logs/mcp_server.log` in the server directory
-- **Console**: Standard output during development
-- **Structured**: JSON format for production logging
+> **Note:** Logging destinations and levels are currently fixed (not yet configurable via environment
+> variables). If you need JSON output, alternate paths, or level control, open an issue — this is on the
+> roadmap and not wired up today.
 
 ## Health Check
 
@@ -497,7 +502,7 @@ curl -X POST http://localhost:8000/messages/ \
     "content": [
       {
         "type": "text",
-        "text": "{\"status\":\"healthy\",\"plugins\":2,\"plugin_names\":[\"botfather\",\"devops\"]}"
+        "text": "{\"status\":\"healthy\",\"plugins\":2,\"plugin_names\":[\"demo_math\",\"demo_text\"]}"
       }
     ]
   }
@@ -518,16 +523,24 @@ curl -X POST http://localhost:8000/messages/ \
 | Argument | Default | Description |
 |----------|---------|-------------|
 | `--allow-external` | `False` | Allow external connections (default: localhost only) |
+| `--require-auth` | `False` | Require the API key even for loopback clients (`MCP_AUTH_ALLOW_LOOPBACK=0`) |
 | `--port` | `8000` | Port to run the server on |
 | `--host` | `127.0.0.1` | Host to bind to (default: localhost for security) |
+| `--plugin-timeout` | none | Seconds before a plugin subprocess is terminated (`0`/negative = no timeout) |
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_PORT` | `8000` | Server port |
-| `MCP_PLUGINS_DIR` | `smcp/plugins/` | Plugin directory |
-| `MCP_LOG_LEVEL` | `INFO` | Logging level |
+| `MCP_HOST` | `127.0.0.1` | Host to bind to |
+| `MCP_PLUGINS_DIR` | `plugins/` (next to `smcp.py`) | Plugin directory |
+| `MCP_API_KEY` | — | Accepted API key for the HTTP/SSE transport |
+| `MCP_API_KEYS` | — | Comma-separated accepted keys (merged with `MCP_API_KEY`) |
+| `MCP_AUTH_DISABLED` | `0` | `1` disables auth **and** the external-bind guard |
+| `MCP_AUTH_ALLOW_LOOPBACK` | `1` | `1` lets loopback clients skip the key; `0` requires it locally too |
+| `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated (`0`/negative = none) |
+| `SMCP_ATTACH_PROFILE` | `full` | Session attach governor profile (`full`, `admin`, `chatter`, `partner`) |
 
 ### Security Configuration
 
@@ -558,7 +571,7 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 
 # Create base MCP server
-server = Server(name="animus-letta-mcp", version="1.0.0")
+server = Server(name="sanctum-letta-mcp", version="3.0.3")
 
 # Create SSE transport
 sse_transport = SseServerTransport("/messages/")

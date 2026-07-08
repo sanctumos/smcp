@@ -24,11 +24,11 @@ curl -X POST http://localhost:8000/messages/ \
 
 ### Bundled demo plugins (`demo_math`, `demo_text`)
 ```bash
-python smcp/plugins/demo_math/cli.py --describe
-python smcp/plugins/demo_math/cli.py calculate --operation multiply --a 6 --b 7
+python plugins/demo_math/cli.py --describe
+python plugins/demo_math/cli.py calculate --operation multiply --a 6 --b 7
 
-python smcp/plugins/demo_text/cli.py slugify --title "Hello World Example"
-python smcp/plugins/demo_text/cli.py hash_preview --text "deterministic tool output"
+python plugins/demo_text/cli.py slugify --title "Hello World Example"
+python plugins/demo_text/cli.py hash_preview --text "deterministic tool output"
 ```
 
 ## 🌐 Client Integration Examples
@@ -568,7 +568,7 @@ class CustomPluginManager:
             return {"error": str(e), "status": "exception"}
 
 # Usage
-plugin_manager = CustomPluginManager("smcp/plugins")
+plugin_manager = CustomPluginManager("plugins")
 
 # List available plugins
 plugins = plugin_manager.list_plugins()
@@ -705,4 +705,5 @@ For additional examples and use cases:
 
 ---
 
-**Have a specific use case?** Visit [animus.uno](https://animus.uno) or follow [@animusuno](https://x.com/animusuno) for support!
+**Have a specific use case?** Visit [sanctumos.org](https://sanctumos.org) or open an issue at
+[github.com/sanctumos/smcp/issues](https://github.com/sanctumos/smcp/issues).

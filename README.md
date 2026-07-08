@@ -1,107 +1,100 @@
 # SMCP
 
 [![License: AGPLv3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Docs License: CC BY-SA 4.0](https://img.shields.io/badge/Docs%20License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)]
-[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%20Compliant-green.svg)](https://modelcontextprotocol.io/)]
-[![Animus Core Module](https://img.shields.io/badge/Animus-Core%20Module-blue.svg)](https://animus.uno)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-Protocol%20Compliant-green.svg)](https://modelcontextprotocol.io/)
+[![SanctumOS](https://img.shields.io/badge/SanctumOS-Core%20Module-blue.svg)](https://sanctumos.org)
 
-**Animus Core Module: Model Context Protocol Server**
+**Sanctum Letta MCP Server: a plugin-based Model Context Protocol server**
 
-SMCP is a powerful, plugin-based Model Context Protocol (MCP) server for the Animus Letta AI framework. This server provides seamless integration between AI clients and external tools through a robust plugin architecture. As an Animus Core Module, it represents the official, production-ready implementation maintained by the Animus team.
+SMCP is a plugin-based Model Context Protocol (MCP) server for the [Letta](https://www.letta.com/)
+agentic AI framework. It gives AI clients a clean, discoverable path to external tools through a
+plug-and-play plugin architecture, and it speaks the base MCP protocol over both **SSE** (for
+remote/HTTP clients like Letta) and **STDIO** (for local clients). SMCP is a SanctumOS core module,
+maintained by the Sanctum team.
 
-## 🔄 Recent Updates
-
-### FastMCP to Base MCP Library Migration
-
-SMCP has been completely rewritten to use the base MCP library instead of FastMCP for full compatibility with Letta's SSE client:
-
-- ✅ **Bidirectional SSE**: Proper client↔server communication
-- ✅ **Letta Compatible**: Tools appear in both test and attached modes
-- ✅ **Production Ready**: Robust error handling and graceful shutdown
-- ✅ **Plugin System**: Dynamic discovery and execution
-
-**Why the change?** FastMCP's SSE implementation is unidirectional (server→client only), which breaks compatibility with Letta's bidirectional SSE client requirements.
+> **Fork note:** This is the **Sanctum** edition (`sanctumos/smcp`). An Animus-branded fork lives at
+> `AnimusUNO/smcp`; the two track each other but carry their own branding.
 
 ## 🚀 Features
 
-- **Plugin Architecture**: Easy-to-write plugins for any external service or tool
-- **MCP Protocol Compliant**: Full support for the Model Context Protocol specification
-- **SSE Transport**: Bidirectional server-sent events for efficient communication with Letta
-- **JSON-RPC 2.0**: Standardized request/response handling
-- **Auto-Discovery**: Automatic plugin detection and tool registration
-- **Health Monitoring**: Built-in health checks and status reporting
-- **Production Ready**: Comprehensive error handling and logging
+- **Plugin architecture** — drop a CLI plugin in a directory and its commands become MCP tools; no core changes required
+- **MCP protocol compliant** — full support for the Model Context Protocol specification
+- **Two transports** — bidirectional **SSE** (`smcp.py`) for Letta and remote clients, and **STDIO** (`smcp_stdio.py`) for local clients
+- **Auto-discovery** — plugins are discovered at startup via a `--describe` contract (with `--help` scraping as a fallback)
+- **Schema-aware arguments** — booleans and other typed args are rendered onto plugin argv per each plugin's declared schema
+- **Optional API-key authentication** — shared-secret auth for the HTTP/SSE transport, fail-closed on external binds
+- **Session attach governor** — expose a curated, profile-scoped subset of tools to a session (`sanctum__tools`)
+- **Configurable plugin timeouts** and **subprocess cleanup** on client disconnect/cancel
+- **Health monitoring & structured logging**
 
-## 🔧 Development branch (`dev`)
+## 🔧 Branches
 
-Day-to-day work and **experimental site-specific plugins** (under `plugins/`) should land on **`dev`**, not necessarily on **`master`**. Keep **`master`** aligned with what you consider stable for public / production SMCP core; merge or cherry-pick from `dev` when ready.
+Day-to-day work and experimental site-specific plugins land on **`dev`**; **`master`** stays aligned
+with what is stable for public/production use. Merge or cherry-pick from `dev` to `master` when ready.
 
 ```bash
 git fetch origin && git checkout dev && git pull origin dev
 ```
 
-## 📖 **Ready to Get Started?**
+## 📖 Documentation
 
-**New to SMCP?** Start with our comprehensive documentation:
-
-- **[🚀 Getting Started Guide](docs/getting-started.md)** - **Complete setup in 5 minutes**
-- **[🔌 Plugin Development](docs/plugin-development-guide.md)** - **Build your first plugin**
-- **[📋 Examples](docs/examples.md)** - **Copy-paste working code**
-- **[🚨 Troubleshooting](docs/troubleshooting.md)** - **Solve any problem quickly**
+- **[🚀 Getting Started Guide](docs/getting-started.md)** — complete setup in a few minutes
+- **[🔌 Plugin Development](docs/plugin-development-guide.md)** — build your first plugin
+- **[📋 Examples](docs/examples.md)** — copy-paste working code
+- **[🚀 Deployment Guide](docs/deployment-guide.md)** — systemd, Docker, reverse proxy
+- **[🔧 API Reference](docs/api-reference.md)** — endpoints, methods, configuration
+- **[🔗 Letta MCP Connection Guide](docs/Letta-MCP-Connection-Guide.md)** — connect Letta clients to SMCP
+- **[🚨 Troubleshooting](docs/troubleshooting.md)** — common issues and fixes
 
 ## 📦 Installation
 
 ### Prerequisites
 
 - Python 3.8 or higher
-- pip package manager
+- pip
 
-### Deployment Options
+### Quick Start
 
-**Option 1: Master Animus Installer (Recommended)**
-The master Animus installer will automatically deploy SMCP to the correct location within your Animus environment with all necessary configurations.
-
-**Option 2: Standalone Repository**
-SMCP can also function as a standalone repository for development, testing, or custom deployments.
-
-### Quick Start (Standalone)
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run the server**
-   ```bash
-   python smcp.py
-   ```
-
-The server will start on `http://localhost:8000` by default with **localhost-only** access for security.
-
-### Security Features
-
-By default, the server binds to localhost only (127.0.0.1) for security. This is the recommended setting.
-
-**For localhost-only access** (default):
 ```bash
-python smcp.py --host 127.0.0.1
+# Clone the repository
+git clone https://github.com/sanctumos/smcp.git
+cd smcp
+
+# Create a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the server (SSE transport)
+python smcp.py
 ```
 
-**To allow external connections** (use with caution):
+The server starts on `http://localhost:8000` by default, bound to **localhost only** for security.
+
+For local STDIO clients, run the STDIO transport instead:
+
 ```bash
-python smcp.py --allow-external
+python smcp_stdio.py
+```
+
+### Security & network binding
+
+By default the server binds to `127.0.0.1` (localhost only). This is the recommended setting.
+
+```bash
+python smcp.py --host 127.0.0.1     # localhost-only (explicit)
+python smcp.py --allow-external     # allow external connections (see auth below)
+python smcp.py --port 9000          # custom port
+python smcp.py --host 0.0.0.0 --port 8000
 ```
 
 #### API-key authentication (HTTP/SSE transport)
 
-The HTTP/SSE transport supports shared-secret authentication. Configure a key
-and clients must present it as `Authorization: Bearer <key>` (or `X-API-Key: <key>`):
+The HTTP/SSE transport supports shared-secret authentication. Configure a key and clients must
+present it as `Authorization: Bearer <key>` (or `X-API-Key: <key>`):
 
 ```bash
 export MCP_API_KEY="your-long-random-secret"
@@ -110,300 +103,126 @@ python smcp.py --allow-external
 
 Key rules:
 
-- **Fail closed:** `--allow-external` (binding `0.0.0.0`) **refuses to start**
-  without `MCP_API_KEY`/`MCP_API_KEYS`, unless you explicitly set
-  `MCP_AUTH_DISABLED=1` to run open (not recommended).
-- **Localhost stays easy:** a default `python smcp.py` on `127.0.0.1` needs no
-  key. Loopback clients bypass the key by default even when one is set; pass
-  `--require-auth` (or `MCP_AUTH_ALLOW_LOOPBACK=0`) to require it locally too.
+- **Fail closed:** `--allow-external` (binding `0.0.0.0`) **refuses to start** without
+  `MCP_API_KEY`/`MCP_API_KEYS`, unless you explicitly set `MCP_AUTH_DISABLED=1` to run open
+  (not recommended).
+- **Localhost stays easy:** a default `python smcp.py` on `127.0.0.1` needs no key. Loopback clients
+  bypass the key by default even when one is set; pass `--require-auth` (or
+  `MCP_AUTH_ALLOW_LOOPBACK=0`) to require it locally too.
 - Requests without a valid key get `401 Unauthorized` (`WWW-Authenticate: Bearer`).
 - The STDIO transport has no network surface and is unaffected.
 
-**Custom port**:
-```bash
-python smcp.py --port 9000
-```
-
-**Custom host binding**:
-```bash
-python smcp.py --host 0.0.0.0 --port 8000
-```
-
 ## 🔧 Configuration
-
-### Master Animus Installer Integration
-
-When deployed via the master Animus installer, SMCP is automatically:
-- Installed to the correct location within your Animus environment
-- Configured with appropriate environment variables
-- Integrated with the Animus plugin management system
-- Set up with proper networking and security configurations
-
-> **Note**: The following configuration options apply to standalone deployments. When using the master installer, these are handled automatically.
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_PORT` | `8000` | Port for the MCP server |
-| `MCP_PLUGINS_DIR` | `plugins/` | Directory containing plugins |
 | `MCP_HOST` | `127.0.0.1` | Host to bind to (default: localhost-only for security) |
-| `MCP_API_KEY` | — | Accepted API key for the HTTP/SSE transport. Presented by clients as `Authorization: Bearer <key>` or `X-API-Key: <key>`. |
+| `MCP_PLUGINS_DIR` | `plugins/` (next to `smcp.py`) | Directory containing plugins |
+| `MCP_API_KEY` | — | Accepted API key for the HTTP/SSE transport (`Authorization: Bearer <key>` or `X-API-Key: <key>`) |
 | `MCP_API_KEYS` | — | Comma-separated list of accepted keys (for rotation / multiple clients). Merged with `MCP_API_KEY`. |
 | `MCP_AUTH_DISABLED` | `0` | Explicit escape hatch: `1` disables auth **and** the external-bind guard (logged loudly). |
 | `MCP_AUTH_ALLOW_LOOPBACK` | `1` | When `1`, loopback (`127.0.0.1`/`::1`) clients skip the key check. Set `0` (or use `--require-auth`) to require the key even locally. |
-| `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated. Unset / `0` / negative means **no timeout** (long-running operations are allowed). Overridden by `--plugin-timeout`. |
-| `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env` (same file Letta uses); default URL is `http://127.0.0.1:8284`. |
-| `LETTA_SERVER_PASSWORD` | — | Bearer token for Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
+| `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated. Unset / `0` / negative means **no timeout**. Overridden by `--plugin-timeout`. |
+| `SMCP_ATTACH_PROFILE` | `full` | Session attach governor profile (`full`, `admin`, `chatter`, `partner`). |
+| `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env`; default URL is `http://127.0.0.1:8284`. |
+| `LETTA_SERVER_PASSWORD` | — | Bearer token for the Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
 | `LETTA_AGENT_ID` | — | Optional. If set, only this agent's env vars are loaded; otherwise all agents' vars are merged. |
 
-### Example Configuration
 
-```bash
-# Default: localhost-only (secure)
-python smcp.py
+### Command-line arguments
 
-# Custom port
-export MCP_PORT=9000
-python smcp.py
-
-# Localhost-only (explicit)
-python smcp.py --host 127.0.0.1
-
-# Allow external connections (use with caution)
-python smcp.py --allow-external
-
-# Custom plugins directory
-export MCP_PLUGINS_DIR=/path/to/custom/plugins
-python smcp.py
-```
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--allow-external` | off | Allow external connections (default: localhost only) |
+| `--require-auth` | off | Require the API key even for loopback clients (`MCP_AUTH_ALLOW_LOOPBACK=0`) |
+| `--host` | `127.0.0.1` | Host to bind to |
+| `--port` | `8000` | Port to run on |
+| `--plugin-timeout` | none | Seconds before a plugin subprocess is terminated (`0`/negative = no timeout) |
 
 ## 🔌 Plugin Development
 
-> **Note**: When deployed via the master Animus installer, plugins are automatically discovered and managed. The following applies to standalone deployments and custom plugin development.
-
-For comprehensive plugin development documentation, see [docs/dev/plugin-development-guide.md](docs/dev/plugin-development-guide.md).
-
-### Plugin Structure
-
-Each plugin should follow this directory structure:
+See the [Plugin Development Guide](docs/plugin-development-guide.md) for the full walkthrough. In short,
+each plugin is a directory with a `cli.py` that exposes commands and (recommended) a `--describe`
+command returning JSON metadata:
 
 ```
 plugins/
-├── your_plugin/
-│   ├── __init__.py
-│   ├── cli.py          # Main plugin interface
-│   └── README.md       # Plugin documentation
+└── your_plugin/
+    ├── __init__.py
+    ├── cli.py          # command interface (required)
+    └── README.md       # plugin docs (recommended)
 ```
 
-### Plugin Deployment with Symlinks
-
-The server supports symbolic links for flexible plugin deployment. You can centralize plugins in a designated location and use symlinks for discovery:
-
-#### Centralized Plugin Management
-
-```
-# Central plugin repository
-/opt/animus/plugins/
-├── demo_math/
-├── demo_text/
-└── custom-plugin/
-
-# MCP server plugin directory with symlinks
-plugins/
-├── demo_math -> /opt/sanctum/plugins/demo_math
-├── demo_text -> /opt/sanctum/plugins/demo_text
-└── custom-plugin -> /opt/sanctum/plugins/custom-plugin
-```
-
-#### Benefits
-
-- **Separation of Concerns**: Keep MCP server code separate from plugin implementations
-- **Centralized Management**: Manage plugins in a designated repository
-- **Dynamic Loading**: Add/remove plugins by creating/removing symlinks
-- **Version Control**: Maintain plugins in separate repositories
-- **Deployment Flexibility**: Deploy plugins independently of the MCP server
-
-#### Environment Variable Override
-
-You can override the plugin directory using the `MCP_PLUGINS_DIR` environment variable:
-
-```bash
-# Use custom plugin directory
-export MCP_PLUGINS_DIR=/opt/sanctum/plugins
-python smcp.py
-```
-
-### Creating a Plugin
-
-1. **Create plugin directory**
-   ```bash
-   mkdir -p plugins/my_plugin
-   ```
-
-2. **Create the CLI interface** (`plugins/my_plugin/cli.py`)
-   ```python
-   #!/usr/bin/env python3
-   """
-   My Plugin CLI
-   
-   A sample plugin for the Sanctum Letta MCP Server.
-   """
-   
-   import argparse
-   import json
-   import sys
-   
-   def main():
-       parser = argparse.ArgumentParser(description="My Plugin CLI")
-       subparsers = parser.add_subparsers(dest="command", help="Available commands")
-       
-       # Add your command
-       cmd_parser = subparsers.add_parser("my-command", help="Execute my command")
-       cmd_parser.add_argument("--param", required=True, help="Required parameter")
-       cmd_parser.add_argument("--optional", default="default", help="Optional parameter")
-       
-       args = parser.parse_args()
-       
-       if args.command == "my-command":
-           result = execute_my_command(args.param, args.optional)
-           print(json.dumps(result))
-       else:
-           parser.print_help()
-           sys.exit(1)
-   
-   def execute_my_command(param, optional):
-       """Execute the main command logic."""
-       # Your plugin logic here
-       return {
-           "status": "success",
-           "param": param,
-           "optional": optional,
-           "message": "Command executed successfully"
-       }
-   
-   if __name__ == "__main__":
-       main()
-   ```
-
-3. **Make it executable**
-   ```bash
-   chmod +x plugins/my_plugin/cli.py
-   ```
-
-4. **Test your plugin**
-   ```bash
-   python plugins/my_plugin/cli.py my-command --param "test" --optional "value"
-   ```
-
-### Plugin Best Practices
-
-1. **Command Structure**: Use descriptive command names with hyphens
-2. **Parameter Validation**: Always validate required parameters
-3. **Error Handling**: Return meaningful error messages
-4. **JSON Output**: Return structured JSON for easy parsing
-5. **Documentation**: Include help text for all commands and parameters
+Every command a plugin exposes becomes an MCP tool named `your_plugin.command`. Point
+`MCP_PLUGINS_DIR` at any directory (symlinks supported) to load plugins from a central location.
 
 ### Bundled demo plugins (working examples)
 
-- **demo_math**: `calculate`, `format_bytes`, `coin_flip` — typed tools, JSON out, **`--describe`** for MCP schemas (no network).
-- **demo_text**: `echo`, `word_count`, `slugify`, `hash_preview` — string utilities agents can chain in one session.
+- **demo_math**: `calculate`, `format_bytes`, `coin_flip` — typed tools, JSON out, `--describe` for MCP schemas (no network)
+- **demo_text**: `echo`, `word_count`, `slugify`, `hash_preview` — string utilities agents can chain in one session
+
+```bash
+python plugins/demo_math/cli.py --describe
+python plugins/demo_math/cli.py calculate --operation add --a 2 --b 3
+python plugins/demo_text/cli.py word_count --text "hello world"
+```
 
 ## 🔗 MCP Protocol Integration
 
 ### Endpoints
 
-- **SSE Endpoint**: `GET /sse` - Server-sent events for real-time communication
-- **Message Endpoint**: `POST /messages/` - JSON-RPC 2.0 message handling
+- **SSE Endpoint**: `GET /sse` — server-sent events for real-time communication
+- **Message Endpoint**: `POST /messages/` — JSON-RPC 2.0 message handling
 
-### Protocol Flow
-
-1. **Connection**: Client establishes SSE connection
-2. **Initialization**: Client sends `initialize` request
-3. **Capability Exchange**: Server responds with available tools
-4. **Tool Execution**: Client can call registered tools
-5. **Event Streaming**: Server sends events via SSE
-
-### Example Client Integration
+### Example client integration
 
 ```python
 import httpx
-import json
 
 async def connect_to_mcp():
     base_url = "http://localhost:8000"
-    
-    # Initialize connection
-    init_request = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-03-26",
-            "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
-            "clientInfo": {"name": "my-client", "version": "1.0.0"}
-        }
-    }
-    
     async with httpx.AsyncClient() as client:
-        response = await client.post(f"{base_url}/messages/", json=init_request)
-        data = response.json()
-        
-        # List available tools
-        tools_request = {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/list"
-        }
-        
-        response = await client.post(f"{base_url}/messages/", json=tools_request)
-        tools = response.json()["result"]["tools"]
-        
-        # Call a tool
-        call_request = {
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
+        # Initialize
+        await client.post(f"{base_url}/messages/", json={
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {
-                "name": "health",
-                "arguments": {}
-            }
-        }
-        
-        response = await client.post(f"{base_url}/messages/", json=call_request)
-        result = response.json()["result"]
-        
-        return result
+                "protocolVersion": "2025-03-26",
+                "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
+                "clientInfo": {"name": "my-client", "version": "1.0.0"},
+            },
+        })
+        # List tools
+        tools = (await client.post(f"{base_url}/messages/", json={
+            "jsonrpc": "2.0", "id": 2, "method": "tools/list",
+        })).json()["result"]["tools"]
+        # Call a tool
+        return (await client.post(f"{base_url}/messages/", json={
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+            "params": {"name": "health", "arguments": {}},
+        })).json()["result"]
 ```
 
 ## 🧪 Testing
-
-### Running Tests
 
 ```bash
 # Run all tests
 python -m pytest tests/ -v
 
-# Run specific test categories
+# By category
 python -m pytest tests/unit/ -v
 python -m pytest tests/integration/ -v
 python -m pytest tests/e2e/ -v
 
-# Run with coverage
-python -m pytest tests/ --cov=smcp --cov-report=html
+# With coverage (project floor is 90%)
+python -m pytest tests/ --cov=. --cov-report=term-missing
 ```
-
-### Test Categories
-
-- **Unit Tests**: Core functionality and plugin system
-- **Integration Tests**: MCP protocol and endpoint testing
-- **E2E Tests**: Complete workflow validation
 
 ## 📊 Monitoring
 
-### Health Check
-
-The server provides a built-in health check tool:
+### Health check
 
 ```bash
 curl -X POST http://localhost:8000/messages/ \
@@ -413,83 +232,39 @@ curl -X POST http://localhost:8000/messages/ \
 
 ### Logging
 
-Logs are written to stdout and, by default, to `logs/mcp_server.log` with rotation. Configure behavior via environment variables:
-
-- `MCP_LOG_LEVEL` (default `INFO`)
-- `MCP_LOG_JSON` (set `true` for JSON logs)
-- `MCP_LOG_FILE` (default `logs/mcp_server.log`)
-- `MCP_LOG_ROTATION` (`size`, `time`, or `none`)
-- `MCP_DISABLE_FILE_LOG` (set `true` to disable file logging)
-
-See `docs/api-reference.md` for the full matrix.
+Logs are written to the console and to a rotating file at `logs/mcp_server.log` (10 MB × 5 backups).
+See the [API Reference](docs/api-reference.md#logging) for details.
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Setup
-
-```bash
-# Install development dependencies
-pip install -r requirements.txt
-
-# Run linting
-flake8 smcp/ tests/
-
-# Run type checking
-mypy smcp/
-
-# Run tests with coverage
-python -m pytest tests/ --cov=smcp --cov-report=html
-```
-
-## 📚 **Comprehensive Documentation**
-
-### 🚀 **Getting Started**
-- **[📖 Getting Started Guide](docs/getting-started.md)** - **NEW USERS START HERE!** Complete setup and first steps
-- **[🔌 Plugin Development Guide](docs/plugin-development-guide.md)** - Create and deploy custom plugins
-- **[📋 Examples Guide](docs/examples.md)** - **Practical examples** and code samples for all use cases
-
-### 🔧 **Configuration & Deployment**
-- **[🚀 Deployment Guide](docs/deployment-guide.md)** - **Production deployment** with systemd, Docker, and reverse proxy
-- **[🔧 Configuration Guide](docs/api-reference.md)** - Complete API documentation and configuration options
-
-### 🔗 **Integration & Troubleshooting**
-- **[🔗 Letta MCP Connection Guide](docs/Letta-MCP-Connection-Guide.md)** - Connect Letta clients to SMCP
-- **[🚨 Troubleshooting Guide](docs/troubleshooting.md)** - **Common issues and solutions** for all problems
-- **[📊 Monitoring & Health Checks](docs/deployment-guide.md#monitoring-and-logging)** - Production monitoring setup
-
-### 👨‍💻 **Developer Resources**
-- **[📋 Examples Guide](docs/examples.md)** - **Practical examples** and code samples for all use cases
+3. Commit your changes
+4. Push to the branch and open a Pull Request against `dev`
 
 ## 📄 License
 
 This project uses dual licensing:
 
-- **Code**: Licensed under the GNU Affero General Public License v3.0 (AGPLv3) - see the [LICENSE](LICENSE) file for details.
-- **Documentation & Data**: Licensed under the Creative Commons Attribution-ShareAlike 4.0 International License (CC-BY-SA 4.0) - see the [LICENSE-DOCS](LICENSE-DOCS) file for details.
+- **Code**: GNU Affero General Public License v3.0 (AGPLv3) — see [LICENSE](LICENSE).
+- **Documentation & Data**: Creative Commons Attribution-ShareAlike 4.0 International (CC-BY-SA 4.0) — see [LICENSE-DOCS](LICENSE-DOCS).
 
-**Important**: AGPLv3 is a copyleft license that requires any derivative works to also be open source. If you modify and distribute this software, you must make your source code available under the same license.
+**Important**: AGPLv3 is a copyleft license. If you modify and distribute this software (including
+running it over a network), you must make your source code available under the same license.
 
 ## 🙏 Acknowledgments
 
 - [Model Context Protocol](https://modelcontextprotocol.io/) for the protocol specification
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk) for the base MCP library
-- The Animus team for the AI framework integration
-- The Letta team for the kernel for AnimusOS
+- The Letta team for the agentic framework SMCP integrates with
+- The Sanctum team for SanctumOS
 
 ## 📞 Support
 
-For support, questions, or contributions:
-
 - **Author**: Mark Rizzn Hopkins
-- **Website**: https://animus.uno
-- **X (Twitter)**: https://x.com/animusuno
+- **Website**: https://sanctumos.org
+- **Issues**: https://github.com/sanctumos/smcp/issues
 
 ---
 
-**Part of the Animus Suite** - A comprehensive AI framework for modern applications. 
+**Part of SanctumOS** — a comprehensive AI framework for modern applications.

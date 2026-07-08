@@ -301,6 +301,11 @@ Common error codes:
 
 ## Authentication Methods
 
+> **Connecting Letta to an authenticated SMCP instance:** if your SMCP server has API-key auth enabled
+> (`MCP_API_KEY`, typically required when bound externally), configure the Letta side with
+> `auth_header="Authorization"` and `auth_token="Bearer <your-key>"` (or use a custom `X-API-Key`
+> header). See the [SMCP API Reference — Authentication](api-reference.md#authentication).
+
 Letta supports multiple authentication methods for MCP servers:
 
 ### 1. Bearer Token Authentication
@@ -991,7 +996,7 @@ logging.getLogger('letta.services.mcp').setLevel(logging.DEBUG)
 - [Model Context Protocol Specification](https://modelcontextprotocol.io/)
 - [JSON-RPC 2.0 Specification](https://www.jsonrpc.org/specification)
 - [Server-Sent Events Specification](https://html.spec.whatwg.org/multipage/server-sent-events.html)
-- [Letta Documentation](https://sanctumos.io)
+- [Letta Documentation](https://docs.letta.com/)
 
 ---
 

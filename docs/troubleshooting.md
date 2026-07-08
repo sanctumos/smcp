@@ -14,7 +14,7 @@ netstat -an | findstr :8000  # Windows
 python --version
 
 # Check if dependencies are installed
-pip list | grep fastapi
+pip list | grep mcp
 ```
 
 ### Connection Issues
@@ -86,18 +86,18 @@ Error: Plugin directory not found: /path/to/plugins
 **Solutions:**
 ```bash
 # Option 1: Set correct plugin directory
-export MCP_PLUGINS_DIR=smcp/plugins
+export MCP_PLUGINS_DIR=plugins
 python smcp.py
 
 # Option 2: Create plugin directory
-mkdir -p smcp/plugins
+mkdir -p plugins
 
 # Option 3: Use absolute path
-export MCP_PLUGINS_DIR=/full/path/to/smcp/plugins
+export MCP_PLUGINS_DIR=/full/path/to/plugins
 python smcp.py
 
 # Option 4: Check if plugins directory exists
-ls -la smcp/plugins/
+ls -la plugins/
 ```
 
 ### 4. Network Binding Issues
@@ -127,7 +127,7 @@ ip link show
 
 **Error Message:**
 ```
-ModuleNotFoundError: No module named 'fastapi'
+ModuleNotFoundError: No module named 'mcp'
 ```
 
 **Solutions:**
@@ -142,8 +142,8 @@ venv\Scripts\activate     # Windows
 # Option 3: Upgrade pip
 pip install --upgrade pip
 
-# Option 4: Install specific package
-pip install fastapi uvicorn
+# Option 4: Install the base MCP library directly
+pip install mcp
 ```
 
 ### 6. SSL/TLS Issues
@@ -208,17 +208,44 @@ docker run --network host your-container
 curl http://localhost:8000
 ```
 
+### 9. Server Exits Immediately with `--allow-external`
+
+**Symptom:** With `--allow-external` (or `MCP_HOST=0.0.0.0`) the process logs a critical error and exits.
+
+**Cause:** SMCP **fails closed** — it refuses to expose an unauthenticated server on a public interface.
+
+**Solutions:**
+```bash
+# Recommended: set an API key
+export MCP_API_KEY="your-long-random-secret"
+python smcp.py --allow-external
+
+# Escape hatch (NOT recommended): run open on purpose
+MCP_AUTH_DISABLED=1 python smcp.py --allow-external
+```
+
+### 10. Clients Get `401 Unauthorized`
+
+**Cause:** The request is missing or presenting the wrong API key on an authenticated transport.
+
+**Solutions:**
+- Send the key as `Authorization: Bearer <key>` **or** `X-API-Key: <key>`.
+- Confirm the key matches `MCP_API_KEY` / one of `MCP_API_KEYS`.
+- Loopback clients skip the key by default; if you set `--require-auth` / `MCP_AUTH_ALLOW_LOOPBACK=0`,
+  even local clients must present it.
+
 ## 🔍 Advanced Debugging
 
-### Enable Verbose Logging
-```bash
-# Set log level to DEBUG
-export LOG_LEVEL=DEBUG
-python smcp.py
+### Verbose Logging
 
-# Or modify the server code temporarily
-# logging.basicConfig(level=logging.DEBUG)
+The rotating file log at `logs/mcp_server.log` already captures `DEBUG`-level detail (the console
+shows `INFO` and above). Tail the file for full diagnostics:
+
+```bash
+tail -f logs/mcp_server.log
 ```
+
+> Logging level/destination are currently fixed in code and not yet environment-configurable.
 
 ### Network Diagnostics
 ```bash
@@ -318,9 +345,9 @@ When reporting issues, include:
 - **System resources** (CPU, memory, disk)
 
 ### Support Channels
-- **Website**: [animus.uno](https://animus.uno)
+- **Website**: [sanctumos.org](https://sanctumos.org)
 - **Documentation**: Check the [main documentation](../README.md#-documentation)
-- **X (Twitter)**: [@animusuno](https://x.com/animusuno)
+- **Issues**: [github.com/sanctumos/smcp/issues](https://github.com/sanctumos/smcp/issues)
 
 ---
 

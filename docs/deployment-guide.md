@@ -26,7 +26,7 @@ sudo chown smcp:smcp /opt/smcp
 ### 2. Install SMCP
 ```bash
 # Clone to system location
-sudo git clone https://github.com/animusos/smcp.git /opt/smcp
+sudo git clone https://github.com/sanctumos/smcp.git /opt/smcp
 cd /opt/smcp
 
 # Install dependencies
@@ -49,8 +49,11 @@ WorkingDirectory=/opt/smcp
 Environment=PATH=/opt/smcp/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=MCP_PORT=8000
 Environment=MCP_HOST=0.0.0.0
-Environment=MCP_PLUGINS_DIR=/opt/smcp/smcp/plugins
-ExecStart=/usr/bin/python smcp.py
+Environment=MCP_PLUGINS_DIR=/opt/smcp/plugins
+# Required when binding externally (MCP_HOST=0.0.0.0): the server fails closed without a key.
+# Store the real secret outside the unit file (e.g. EnvironmentFile=/etc/smcp/smcp.env).
+Environment=MCP_API_KEY=change-me-to-a-long-random-secret
+ExecStart=/usr/bin/python smcp.py --allow-external
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -59,6 +62,11 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 ```
+
+> **Security:** When `MCP_HOST=0.0.0.0` (external bind), SMCP **refuses to start** without
+> `MCP_API_KEY` / `MCP_API_KEYS`. Prefer an `EnvironmentFile=` so the secret is not stored in the unit
+> file, and keep the port behind a reverse proxy / firewall. Clients present the key as
+> `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
 ### 4. Enable and Start Service
 ```bash
@@ -109,13 +117,13 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone SMCP
-RUN git clone https://github.com/animusos/smcp.git .
+RUN git clone https://github.com/sanctumos/smcp.git .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Create plugin directory
-RUN mkdir -p smcp/plugins
+RUN mkdir -p plugins
 
 # Expose port
 EXPOSE 8000
@@ -124,9 +132,12 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/messages/ || exit 1
 
-# Run SMCP
-CMD ["python", "smcp.py", "--host", "0.0.0.0"]
+# Run SMCP (external bind requires MCP_API_KEY at runtime — see below)
+CMD ["python", "smcp.py", "--allow-external"]
 ```
+
+> **Note:** The container binds externally, so you must pass `MCP_API_KEY` at runtime
+> (`docker run -e MCP_API_KEY=...`) or the server will fail closed and exit.
 
 ### 2. Build and Run
 ```bash
@@ -137,7 +148,8 @@ docker build -t smcp:latest .
 docker run -d \
     --name smcp \
     -p 8000:8000 \
-    -v /path/to/plugins:/app/smcp/plugins \
+    -e MCP_API_KEY=change-me-to-a-long-random-secret \
+    -v /path/to/plugins:/app/plugins \
     --restart unless-stopped \
     smcp:latest
 
@@ -160,12 +172,14 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./plugins:/app/smcp/plugins
+      - ./plugins:/app/plugins
       - ./logs:/app/logs
     environment:
       - MCP_PORT=8000
       - MCP_HOST=0.0.0.0
-      - MCP_PLUGINS_DIR=/app/smcp/plugins
+      - MCP_PLUGINS_DIR=/app/plugins
+      # Required for external bind; use an .env file or secret rather than a literal here.
+      - MCP_API_KEY=change-me-to-a-long-random-secret
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/messages/"]
@@ -356,7 +370,7 @@ sudo cp -r /opt/smcp /opt/smcp.backup.$(date +%Y%m%d)
 
 # Update code
 cd /opt/smcp
-sudo -u smcp git pull origin main
+sudo -u smcp git pull origin master
 
 # Install new dependencies
 sudo -u smcp python -m pip install --user -r requirements.txt
@@ -381,7 +395,8 @@ docker rm smcp
 docker run -d \
     --name smcp \
     -p 8000:8000 \
-    -v /path/to/plugins:/app/smcp/plugins \
+    -e MCP_API_KEY=change-me-to-a-long-random-secret \
+    -v /path/to/plugins:/app/plugins \
     --restart unless-stopped \
     smcp:latest
 ```
@@ -440,4 +455,4 @@ openssl x509 -in /etc/nginx/ssl/smcp.crt -text -noout | grep "Not After"
 
 ---
 
-**Need help with deployment?** Check the [Troubleshooting Guide](troubleshooting.md) or visit [animus.uno](https://animus.uno) for support.
+**Need help with deployment?** Check the [Troubleshooting Guide](troubleshooting.md) or visit [sanctumos.org](https://sanctumos.org) for support.

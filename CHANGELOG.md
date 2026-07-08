@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Documentation
+
+- Full documentation overhaul: rebranded this repository's docs to **Sanctum** (SanctumOS / `sanctumos.org`), leaving the Animus branding to the `AnimusUNO/smcp` fork. Corrected clone URLs to `sanctumos/smcp`, the default plugins directory to `plugins/`, and the MCP server name to `sanctum-letta-mcp`. Replaced the stale "no authentication" API-reference section with the real API-key auth, documented `--require-auth` / `--plugin-timeout` and the `MCP_API_KEY` / `MCP_PLUGIN_TIMEOUT` / `SMCP_ATTACH_PROFILE` environment variables across the guides, and removed references to the retired `botfather` / `devops` plugins in favor of the bundled `demo_math` / `demo_text`. Moved one-time transition notes to `docs/history/`.
+
+## [3.0.3] - 2026-07-08
+
 ### Added
 
 - **HTTP/SSE transport authentication** (issue #39): optional shared-secret auth via `Authorization: Bearer <key>` / `X-API-Key`, configured with `MCP_API_KEY` / `MCP_API_KEYS`. `--allow-external` now **fails closed** — it refuses to start without a key unless `MCP_AUTH_DISABLED=1`. Loopback clients bypass by default (`MCP_AUTH_ALLOW_LOOPBACK`, `--require-auth`). Enforced by a raw ASGI middleware so SSE streaming is never buffered. STDIO transport is unaffected.
@@ -32,42 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Plugin subprocess timeout is now operator-configurable** (issue #41, mirrors AnimusUNO #10) via `MCP_PLUGIN_TIMEOUT` (seconds) and the `--plugin-timeout` CLI flag (flag takes precedence). **The default is now no timeout** (previously a hardcoded 300s), so long-running plugin operations are not cut off; set a value to protect against hung processes. On timeout the child is terminated (`terminate()` → `kill()`) and a structured timeout error is returned.
 - **Broca MCP plugin** (`broca__*` tools) **removed from this repository**. It ships with **[sanctumos/broca](https://github.com/sanctumos/broca)** under `smcp/broca/`. Set `MCP_PLUGINS_DIR` to that repo’s `smcp/` directory (or symlink `broca` into your existing plugins root). See `plugins/README.md`.
 
-## [4.0.0] - 2025-01-XX
-
-### 🚨 BREAKING CHANGE - FastMCP to Base MCP Library Migration
-
-This release represents a complete rewrite of the SMCP server, migrating from FastMCP to the base MCP library to achieve full compatibility with Letta's SSE client.
-
-### 🔄 Changed
-
-- **Complete Architecture Rewrite**: Migrated from FastMCP to base MCP library (`mcp.server.Server` + `mcp.server.sse.SseServerTransport`)
-- **SSE Implementation**: Now uses proper bidirectional SSE communication instead of unidirectional FastMCP SSE
-- **Server Name**: Changed from "sanctum-letta-mcp" to maintain Sanctum branding
-- **Dependencies**: Updated MCP library requirement to >=1.17.0
-
-### ✅ Fixed
-
-- **Letta Compatibility**: Tools now appear in both test mode and attached mode
-- **Bidirectional Communication**: Proper client↔server communication over SSE
-- **Session Management**: Correct handling of MCP protocol initialization and tool calls
-- **Tool Schema Validation**: Valid JSON schemas that pass Letta's strict validation
-
-### 🎯 Why This Change?
-
-FastMCP's SSE implementation is unidirectional (server→client only), which breaks compatibility with Letta's bidirectional SSE client requirements. The base MCP library provides the proper bidirectional SSE transport needed for full Letta integration.
-
-### 📚 Documentation
-
-- **Updated**: Letta MCP Connection Guide with FastMCP compatibility warnings
-- **Added**: FastMCP vs Base MCP Library comparison section
-- **Enhanced**: Troubleshooting section with FastMCP-specific issues
-- **Added**: Real-world success story from our implementation
-
 ## [3.0.0] - 2025-07-11
 
 ### 🎉 Major Release - Complete Overhaul
 
-This release represents a complete rewrite and major upgrade of the Animus Letta MCP Server, addressing weeks of development challenges and providing a robust, production-ready solution.
+This release represents a complete rewrite and major upgrade of the Sanctum Letta MCP Server, addressing weeks of development challenges and providing a robust, production-ready solution.
 
 ### ✨ Added
 
@@ -103,7 +78,7 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 - **Legacy STDIO Protocol**: Removed outdated protocol implementation
 - **Custom SSE Handler**: Replaced with base MCP library's SSE transport implementation
-- **FastMCP Dependency**: Migrated away from FastMCP due to SSE limitations (see docs/FASTMCP-issue_update.md)
+- **FastMCP Dependency**: Migrated away from FastMCP due to SSE limitations (see docs/history/FASTMCP-issue_update.md)
 - **Problematic Tests**: Removed hanging and incompatible test files
 - **Outdated Documentation**: Replaced with comprehensive, user-friendly guides
 
@@ -181,7 +156,8 @@ This release represents a complete rewrite and major upgrade of the Animus Letta
 
 ## Version History
 
-- **3.0.0** (Current): Complete overhaul with base MCP library, comprehensive testing, and production readiness
+- **3.0.3** (Current): HTTP/SSE API-key auth, session attach governor, schema-aware boolean arguments, configurable plugin timeout, subprocess cleanup on cancel; coverage floor raised to 90%
+- **3.0.0**: Complete overhaul with base MCP library, comprehensive testing, and production readiness
 - **2.2.0**: SSE-based implementation with basic functionality
 - **2.1.0**: Plugin system and STDIO transport
 - **2.0.0**: Initial MCP server foundation

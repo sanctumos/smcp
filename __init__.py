@@ -1,11 +1,11 @@
 """
-Animus Letta MCP Package
+Sanctum Letta MCP Package
 
-A modular orchestration server for Letta Agentic AI framework.
-Part of the Animus Suite - A comprehensive AI framework for modern applications.
+A modular, plugin-based orchestration server for the Letta Agentic AI framework.
+Part of SanctumOS.
 """
 
 __version__ = "3.0.3"
 __author__ = "Mark Rizzn Hopkins"
 __license__ = "AGPLv3"
-__url__ = "https://animus.uno" 
+__url__ = "https://sanctumos.org"
