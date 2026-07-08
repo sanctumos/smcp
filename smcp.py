@@ -23,6 +23,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from __future__ import annotations
 
+# Canonical package identity (issue #50). This module doubles as the top-level
+# importable module `smcp`; there is no separate package __init__.py to drift
+# out of sync. `pyproject.toml` carries the same version as the build-time
+# source of truth.
+__version__ = "3.0.3"
+__author__ = "Mark Rizzn Hopkins"
+__license__ = "AGPLv3"
+__url__ = "https://sanctumos.org"
+
 import argparse
 import asyncio
 import hmac
@@ -996,20 +1005,23 @@ def register_plugin_tools(server: Server):
 
 
 def _package_version() -> str:
-    """Best-effort read of the package version from the sibling ``__init__.py``.
+    """Return the package version (issue #50).
 
-    File-based rather than importing the package: ``smcp.py`` doubles as a
-    top-level module and the package import path is ambiguous (see #50). Falls
-    back to ``"0.0.0"`` if the version can't be read.
+    Prefers installed distribution metadata (``pip install .`` / wheel) so the
+    reported version always matches what was actually installed; falls back to
+    the module-level ``__version__`` literal when running from a source tree
+    that was never installed.
     """
     try:
-        init_path = Path(__file__).resolve().parent / "__init__.py"
-        for line in init_path.read_text(encoding="utf-8").splitlines():
-            if line.strip().startswith("__version__"):
-                return line.split("=", 1)[1].strip().strip("\"'")
-    except Exception:  # pragma: no cover - defensive, version read is best-effort
+        from importlib.metadata import PackageNotFoundError, version
+
+        try:
+            return version("smcp")
+        except PackageNotFoundError:
+            pass
+    except Exception:  # pragma: no cover - importlib.metadata ships on 3.10+
         pass
-    return "0.0.0"
+    return __version__
 
 
 def create_server() -> Server:

@@ -57,12 +57,23 @@ test = [
     "aiohttp-test-utils==0.1.0",
 ]
 
+[project.scripts]
+# `pip install .` exposes both transports as console commands (issue #50).
+smcp = "smcp:main"
+smcp-stdio = "smcp_stdio:main"
+
 [project.urls]
 Homepage = "https://sanctumos.org"
 Documentation = "https://github.com/sanctumos/smcp"
 Repository = "https://github.com/sanctumos/smcp"
 Issues = "https://github.com/sanctumos/smcp/issues"
 Changelog = "https://github.com/sanctumos/smcp/blob/master/CHANGELOG.md"
+
+[tool.setuptools]
+# Flat single-file modules, declared explicitly so the build is unambiguous and
+# `import smcp` never collides with a package directory (issue #50). Plugins are
+# discovered at runtime via MCP_PLUGINS_DIR and are intentionally not packaged.
+py-modules = ["smcp", "smcp_stdio", "governor"]
 
 # NOTE: pytest and coverage configuration live in `pytest.ini` and `.coveragerc`
 # (the single source of truth). Do not re-add [tool.pytest.ini_options] or

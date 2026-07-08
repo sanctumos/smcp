@@ -179,15 +179,19 @@ class TestArgsHostServer:
         assert srv.version == smcp_module._package_version()
         assert srv.version != "1.0.0"
 
-    def test_package_version_matches_init(self):
-        # #49: _package_version reads __version__ from the sibling __init__.py.
-        from pathlib import Path as _P
-        init = (_P(smcp_module.__file__).resolve().parent / "__init__.py").read_text()
-        expected = next(
-            ln.split("=", 1)[1].strip().strip("\"'")
-            for ln in init.splitlines() if ln.strip().startswith("__version__")
-        )
-        assert smcp_module._package_version() == expected
+    def test_package_version_source_run(self):
+        # #50: from a non-installed source tree, _package_version falls back to
+        # the module-level __version__ literal (importlib.metadata has no dist).
+        import importlib.metadata as _md
+        with patch.object(_md, "version", side_effect=_md.PackageNotFoundError):
+            assert smcp_module._package_version() == smcp_module.__version__
+
+    def test_package_version_installed(self):
+        # #50: when installed, the reported version comes from distribution
+        # metadata so it matches the actually-installed wheel.
+        import importlib.metadata as _md
+        with patch.object(_md, "version", return_value="9.9.9"):
+            assert smcp_module._package_version() == "9.9.9"
 
     def test_get_plugin_help_exception(self):
         with patch.object(smcp_module.subprocess, "run", side_effect=OSError("spawn fail")):

@@ -51,8 +51,8 @@ for handler in list(smcp.logger.handlers):
             handler.setLevel(logging.WARNING)
 
 
-async def main():
-    """Main entry point for STDIO mode."""
+async def async_main():
+    """Async entry point for STDIO mode."""
     from mcp.server.stdio import stdio_server
     
     try:
@@ -110,5 +110,10 @@ async def main():
         sys.exit(1)
 
 
+def main():
+    """Synchronous entry point for the ``smcp-stdio`` console script (issue #50)."""
+    asyncio.run(async_main())
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
