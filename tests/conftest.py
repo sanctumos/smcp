@@ -47,9 +47,13 @@ def _reset_governor_state():
     after every test so ordering never matters.
     """
     os.environ.pop("SMCP_ATTACH_PROFILE", None)
+    os.environ.pop("SMCP_PROFILES", None)
+    os.environ.pop("SMCP_ADMIN_PREFIX", None)
     governor.reset_for_tests()
     yield
     os.environ.pop("SMCP_ATTACH_PROFILE", None)
+    os.environ.pop("SMCP_PROFILES", None)
+    os.environ.pop("SMCP_ADMIN_PREFIX", None)
     governor.reset_for_tests()
 
 

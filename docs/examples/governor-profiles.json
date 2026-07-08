@@ -1,0 +1,44 @@
+{
+  "description": "Example SMCP governor profiles for a Sanctum deployment with DSC Tasks and Kitchen POS Porter partner tools. Copy/adapt for your deployment and point SMCP_PROFILES at it.",
+  "default_profile": "chatter",
+  "profiles": {
+    "chatter": {
+      "mode": "explicit",
+      "tools": [
+        "tasks__create-task",
+        "tasks__update-task",
+        "tasks__get-task",
+        "tasks__search-tasks",
+        "tasks__list-tasks",
+        "tasks__create-comment",
+        "tasks__list-comments",
+        "tasks__get-document",
+        "tasks__list-documents",
+        "tasks__create-document",
+        "tasks__update-document",
+        "tasks__create-document-comment",
+        "tasks__list-document-comments",
+        "tasks__list-directory-projects",
+        "tasks__list-todo-lists"
+      ]
+    },
+    "admin": {
+      "mode": "prefix",
+      "prefix": "tasks__"
+    },
+    "partner": {
+      "mode": "explicit",
+      "tools": [
+        "kitchen_pos_partner__me",
+        "kitchen_pos_partner__menu",
+        "kitchen_pos_partner__windows",
+        "kitchen_pos_partner__orders"
+      ]
+    }
+  },
+  "intent_hints": [
+    {"intent": "create task", "tool": "tasks__create-task", "needs": "list-id"},
+    {"intent": "save document", "tool": "tasks__create-document", "needs": "project-id"},
+    {"intent": "list project docs", "tool": "tasks__list-documents", "needs": "project-id"}
+  ]
+}

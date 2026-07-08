@@ -126,7 +126,9 @@ Key rules:
 | `MCP_AUTH_DISABLED` | `0` | Explicit escape hatch: `1` disables auth **and** the external-bind guard (logged loudly). |
 | `MCP_AUTH_ALLOW_LOOPBACK` | `1` | When `1`, loopback (`127.0.0.1`/`::1`) clients skip the key check. Set `0` (or use `--require-auth`) to require the key even locally. |
 | `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated. Unset / `0` / negative means **no timeout**. Overridden by `--plugin-timeout`. |
-| `SMCP_ATTACH_PROFILE` | `full` | Session attach governor profile (`full`, `admin`, `chatter`, `partner`). |
+| `SMCP_ATTACH_PROFILE` | *(from profile config, else `full`)* | Session attach governor profile name (must exist in loaded profile config). |
+| `SMCP_PROFILES` | *(unset)* | JSON profile config file or directory of `*.json` profile files. Product-specific allowlists live here — see `docs/examples/governor-profiles.json`. |
+| `SMCP_ADMIN_PREFIX` | *(unset)* | Optional generic `admin` profile: attach all catalog tools matching this prefix (e.g. `tasks__`). |
 | `LETTA_SERVER_URL` | — | If set with `LETTA_SERVER_PASSWORD`, SMCP loads agent env vars (secrets) from the Letta API at startup. If unset, SMCP tries `~/.letta/.env`; default URL is `http://127.0.0.1:8284`. |
 | `LETTA_SERVER_PASSWORD` | — | Bearer token for the Letta API (or use `LETTA_API_KEY`). Required for loading env vars. |
 | `LETTA_AGENT_ID` | — | Optional. If set, only this agent's env vars are loaded; otherwise all agents' vars are merged. |

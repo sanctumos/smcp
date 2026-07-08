@@ -10,11 +10,21 @@ Licensed under AGPLv3 (see LICENSE).
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 import governor
 from mcp.types import Tool
+
+_PROFILES_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "governor_profiles_sanctum.json"
+
+
+@pytest.fixture(autouse=True)
+def _sanctum_profile_config(monkeypatch):
+    """Reproduce the legacy tasks/partner deployment via external config (#45)."""
+    monkeypatch.setenv("SMCP_PROFILES", str(_PROFILES_FIXTURE))
+    governor.reset_for_tests()
 
 
 def _sample_tools():
@@ -118,15 +128,17 @@ class TestAttachDetach:
 
 @pytest.mark.unit
 class TestFilterAndBootstrap:
-    def test_filter_tools_autopopulates_catalog_and_inserts_governor(self):
-        # No explicit set_catalog: default bootstrap ("full") runs against an
-        # empty catalog, so only the governor tool is attached, but the catalog
-        # is lazily populated from the passed-in tools (exercises the
-        # `if not _catalog` branch).
+    def test_filter_tools_autopopulates_catalog_and_inserts_governor(self, monkeypatch):
+        monkeypatch.setenv("SMCP_ATTACH_PROFILE", "full")
+        governor.reset_for_tests()
+        # No explicit set_catalog: bootstrap runs on an empty catalog, then
+        # filter_tools lazily populates the catalog and re-applies the active
+        # full profile so every discovered tool is attached.
         listed = governor.filter_tools(_sample_tools())
         names = [t.name for t in listed]
-        assert names == [governor.GOVERNOR_TOOL_NAME]
+        assert governor.GOVERNOR_TOOL_NAME in names
         assert "tasks__list-users" in governor.list_available()
+        assert "tasks__list-users" in names
 
     def test_filter_tools_does_not_double_insert_governor(self):
         governor.set_catalog(t.name for t in _sample_tools())
@@ -231,3 +243,62 @@ class TestGate:
         payload = json.loads(blocked)
         assert payload["error"] == "tool_not_attached"
         assert governor.GOVERNOR_TOOL_NAME in payload["hint"]
+
+
+@pytest.mark.unit
+class TestProfileConfig:
+    def test_no_config_yields_full_only(self, monkeypatch):
+        monkeypatch.delenv("SMCP_PROFILES", raising=False)
+        monkeypatch.delenv("SMCP_ADMIN_PREFIX", raising=False)
+        governor.reset_for_tests()
+        governor.set_catalog(t.name for t in _sample_tools())
+        assert governor.profile_names() == ["full"]
+        attached = set(governor.attach_profile("full")["attached"])
+        assert "tasks__create-task" in attached
+        assert "kitchen_pos_partner__menu" in attached
+        with pytest.raises(ValueError):
+            governor.attach_profile("chatter")
+
+    def test_admin_prefix_env_without_config_file(self, monkeypatch):
+        monkeypatch.delenv("SMCP_PROFILES", raising=False)
+        monkeypatch.setenv("SMCP_ADMIN_PREFIX", "tasks__")
+        governor.reset_for_tests()
+        governor.set_catalog(t.name for t in _sample_tools())
+        attached = set(governor.attach_profile("admin")["attached"])
+        assert "tasks__list-users" in attached
+        assert "kitchen_pos_partner__menu" not in attached
+
+    def test_load_profiles_from_directory(self, monkeypatch, tmp_path):
+        (tmp_path / "a.json").write_text(_PROFILES_FIXTURE.read_text(), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        governor.reset_for_tests()
+        governor.set_catalog(t.name for t in _sample_tools())
+        attached = set(governor.attach_profile("partner")["attached"])
+        assert "kitchen_pos_partner__menu" in attached
+
+    def test_invalid_profile_file_raises(self, monkeypatch, tmp_path):
+        bad = tmp_path / "bad.json"
+        bad.write_text("{not json", encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(bad))
+        governor.reset_for_tests()
+        with pytest.raises(ValueError, match="failed to load"):
+            governor.profile_names()
+
+    def test_glob_profile_mode(self, monkeypatch, tmp_path):
+        cfg = {
+            "profiles": {
+                "pos": {"mode": "glob", "pattern": "kitchen_pos_partner__*"}
+            }
+        }
+        (tmp_path / "pos.json").write_text(json.dumps(cfg), encoding="utf-8")
+        monkeypatch.setenv("SMCP_PROFILES", str(tmp_path))
+        governor.reset_for_tests()
+        governor.set_catalog(t.name for t in _sample_tools())
+        attached = set(governor.attach_profile("pos")["attached"]) - {governor.GOVERNOR_TOOL_NAME}
+        assert attached == {"kitchen_pos_partner__menu"}
+
+    def test_help_without_config_has_no_product_hints(self, monkeypatch):
+        monkeypatch.delenv("SMCP_PROFILES", raising=False)
+        governor.reset_for_tests()
+        out = json.loads(governor.handle_governor({"action": "help"}))
+        assert out["matches"] == []

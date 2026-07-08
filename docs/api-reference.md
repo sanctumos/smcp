@@ -572,7 +572,9 @@ curl -X POST http://localhost:8000/messages/ \
 | `MCP_AUTH_DISABLED` | `0` | `1` disables auth **and** the external-bind guard |
 | `MCP_AUTH_ALLOW_LOOPBACK` | `1` | `1` lets loopback clients skip the key; `0` requires it locally too |
 | `MCP_PLUGIN_TIMEOUT` | — (none) | Seconds before a plugin subprocess is terminated (`0`/negative = none) |
-| `SMCP_ATTACH_PROFILE` | `full` | Session attach governor profile (`full`, `admin`, `chatter`, `partner`) |
+| `SMCP_ATTACH_PROFILE` | *(from profile config, else `full`)* | Session attach governor profile name (must exist in loaded profile config) |
+| `SMCP_PROFILES` | *(unset)* | Path to a JSON profile config file **or** a directory of `*.json` files. Product-specific tool allowlists (e.g. Tasks `chatter`, Kitchen POS `partner`) belong here — not in core. See `docs/examples/governor-profiles.json`. |
+| `SMCP_ADMIN_PREFIX` | *(unset)* | When set (e.g. `tasks__`), enables a generic built-in `admin` profile that attaches every catalog tool with that prefix. Used when no external profile file defines `admin`. |
 
 ### Security Configuration
 
