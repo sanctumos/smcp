@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Structured (array/object) tool arguments now round-trip to plugins as clean JSON** (issue #56): `execute_plugin_tool` renders array/object arguments schema-aware. Arrays of objects are serialized as a single `--name <json>` (no more Python `repr` on argv), object params and bare dicts are JSON-encoded, and Letta's single-child `{"item": ...}` array coercion is normalized centrally so array-typed params receive a real list. Scalar arrays still render as repeated flags (argparse `nargs`/`action=append`). This is the root-cause fix behind the `kitchen_pos` catering "recipients array required" failures.
 
+### Changed
+
+- **Core is product-agnostic: argument-alias coalescing is now generic** (issue #44). `_coalesce_tool_argument_aliases` no longer hardcodes any plugin's field names (previously `payload_json` / `catering_invoice_id` / `invoice_command`). It collapses hyphen/underscore key variants to a single canonical key for *any* parameter, so new plugins plug in with zero core edits.
+
 ### Documentation
 
 - Full documentation overhaul: rebranded this repository's docs to **Sanctum** (SanctumOS / `sanctumos.org`), leaving the Animus branding to the `AnimusUNO/smcp` fork. Corrected clone URLs to `sanctumos/smcp`, the default plugins directory to `plugins/`, and the MCP server name to `sanctum-letta-mcp`. Replaced the stale "no authentication" API-reference section with the real API-key auth, documented `--require-auth` / `--plugin-timeout` and the `MCP_API_KEY` / `MCP_PLUGIN_TIMEOUT` / `SMCP_ATTACH_PROFILE` environment variables across the guides, and removed references to the retired `botfather` / `devops` plugins in favor of the bundled `demo_math` / `demo_text`. Moved one-time transition notes to `docs/history/`.

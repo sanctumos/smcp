@@ -346,22 +346,26 @@ def parse_commands_from_help(help_text: str) -> List[str]:
 
 
 def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
-    """Letta/models often send hyphenated JSON keys; plugins use argparse dest with underscores."""
+    """Collapse hyphen/underscore key variants to one canonical (underscore) key.
+
+    Models (Letta especially) send hyphenated JSON keys while plugins declare
+    argparse ``dest``s with underscores; the argv builder converts ``_`` -> ``-``
+    when composing ``--flags``, so the only job here is to normalize duplicate
+    spellings. This is done **generically** — the core carries no product-specific
+    field names (issue #44). When both a ``foo-bar`` and ``foo_bar`` are present,
+    the first non-null value wins (underscore spelling is canonical).
+    """
     if not isinstance(arguments, dict):
         return arguments
-    out = dict(arguments)
-    if "payload_json" in out and "payload-json" in out:
-        del out["payload-json"]
-    elif "payload-json" in out and "payload_json" not in out:
-        out["payload_json"] = out.pop("payload-json")
-    if "catering_invoice_id" in out and "catering-invoice-id" in out:
-        del out["catering-invoice-id"]
-    elif "catering-invoice-id" in out and "catering_invoice_id" not in out:
-        out["catering_invoice_id"] = out.pop("catering-invoice-id")
-    if "invoice_command" in out and "invoice-command" in out:
-        del out["invoice-command"]
-    elif "invoice-command" in out and "invoice_command" not in out:
-        out["invoice_command"] = out.pop("invoice-command")
+    out: dict = {}
+    for key, value in arguments.items():
+        canon = key.replace("-", "_")
+        if canon in out:
+            # A variant is already present; only let a non-null value fill a null.
+            if out[canon] is None and value is not None:
+                out[canon] = value
+            continue
+        out[canon] = value
     return out
 
 

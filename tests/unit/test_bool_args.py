@@ -260,6 +260,29 @@ class TestCoalesceAliases:
             {"invoice-command": "y"}
         ) == {"invoice_command": "y"}
 
+    def test_generic_arbitrary_key_no_product_literals(self):
+        # #44: coalescing is generic — arbitrary hyphenated params normalize too.
+        assert smcp_module._coalesce_tool_argument_aliases(
+            {"some-random-flag": "v"}
+        ) == {"some_random_flag": "v"}
+
+    def test_first_nonnull_variant_wins(self):
+        assert smcp_module._coalesce_tool_argument_aliases(
+            {"foo_bar": "a", "foo-bar": "b"}
+        ) == {"foo_bar": "a"}
+
+    def test_null_variant_filled_by_nonnull(self):
+        assert smcp_module._coalesce_tool_argument_aliases(
+            {"foo_bar": None, "foo-bar": "v"}
+        ) == {"foo_bar": "v"}
+
+    def test_core_has_no_product_specific_literals(self):
+        # Guard: the coalescer must not name any product field (issue #44).
+        import inspect
+        src = inspect.getsource(smcp_module._coalesce_tool_argument_aliases)
+        for literal in ("payload_json", "catering_invoice_id", "invoice_command"):
+            assert literal not in src
+
 
 # --- registration caches the command spec ----------------------------------
 
