@@ -386,6 +386,86 @@ def _command_param_specs(plugin_name: str, command: str) -> Dict[str, Dict[str, 
     return out
 
 
+def _arg_declared_type(param_spec: Optional[Dict[str, Any]]) -> str:
+    """Return the lowercased declared JSON ``type`` for a parameter (``""`` if unknown).
+
+    Read from the plugin's cached ``--describe`` spec. Drives schema-aware
+    serialization of structured (array/object) arguments (issue #56).
+    """
+    if not param_spec:
+        return ""
+    return str(param_spec.get("type", "")).strip().lower()
+
+
+def _unwrap_item_array(value: Any) -> list:
+    """Coerce Letta's single-child ``{"item": X}`` array encoding into a real list.
+
+    Letta/XML tool-argument serialization commonly renders a one-element array as
+    an object ``{"item": {...}}`` (or ``{"item": [...]}``). For a parameter the
+    plugin declares as an array, normalize that back to a list so plugins receive
+    clean JSON and don't each have to reinvent this unwrap (issue #56):
+
+    - a real list passes through unchanged;
+    - ``{"item": [...]}`` -> the inner list;
+    - ``{"item": {...}}`` -> ``[{...}]``;
+    - any other dict/scalar -> a single-element list.
+    """
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        if set(value.keys()) == {"item"}:
+            inner = value["item"]
+            return inner if isinstance(inner, list) else [inner]
+        return [value]
+    return [value]
+
+
+def _render_tool_argument(
+    arg_name: str, value: Any, param_spec: Optional[Dict[str, Any]]
+) -> List[str]:
+    """Render one tool argument to argv fragments, schema-aware (issues #37/#38/#56).
+
+    - ``bool`` -> flag-style (bare ``--name`` when true) or ``--name true|false``
+      per the plugin's ``--describe`` declaration.
+    - declared ``array`` -> a single ``--name <json>`` after normalizing Letta's
+      ``{"item": ...}`` wrappers; a ``str`` value is passed through untouched
+      (already-serialized JSON).
+    - declared ``object`` or a ``dict`` value -> a single ``--name <json>``.
+    - an untyped ``list`` -> a single ``--name <json>`` when it holds structured
+      items (dict/list), otherwise repeated ``--name value`` for scalar lists
+      (backward-compatible with argparse ``nargs``).
+    - anything else -> ``--name str(value)``.
+    """
+    declared = _arg_declared_type(param_spec)
+    if isinstance(value, bool):
+        if _boolean_is_flag_style(param_spec):
+            return [f"--{arg_name}"] if value else []
+        return [f"--{arg_name}", "true" if value else "false"]
+    if declared == "array":
+        # Already-serialized JSON string: pass through untouched.
+        if isinstance(value, str):
+            return [f"--{arg_name}", value]
+        # Normalize Letta's single-child {"item": ...} wrapper to a real list.
+        value = _unwrap_item_array(value)
+    if declared == "object":
+        if isinstance(value, (dict, list)):
+            return [f"--{arg_name}", json.dumps(value, separators=(',', ':'))]
+        return [f"--{arg_name}", str(value)]
+    if isinstance(value, dict):
+        # Letta/MCP often pass objects; plugins expect JSON on argv (not Python repr).
+        return [f"--{arg_name}", json.dumps(value, separators=(',', ':'))]
+    if isinstance(value, list):
+        # Decide by content: arrays of structured items must be valid JSON;
+        # scalar arrays render as repeated flags (argparse nargs / action=append).
+        if any(isinstance(item, (dict, list)) for item in value):
+            return [f"--{arg_name}", json.dumps(value, separators=(',', ':'))]
+        fragment: List[str] = []
+        for item in value:
+            fragment.extend([f"--{arg_name}", str(item)])
+        return fragment
+    return [f"--{arg_name}", str(value)]
+
+
 def _boolean_is_flag_style(param_spec: Optional[Dict[str, Any]]) -> bool:
     """Decide how a boolean argument should be rendered on argv.
 
@@ -496,25 +576,10 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
                 continue
             # Convert parameter name (use_ssl) to CLI argument (--use-ssl)
             arg_name = key.replace('_', '-')
-            if isinstance(value, bool):
-                # Render booleans per the plugin's --describe declaration:
-                # store_true/store_false -> bare flag only when true (#38);
-                # otherwise explicit --name true|false (#37, and the default).
-                if _boolean_is_flag_style(param_specs.get(arg_name)):
-                    if value:
-                        cmd_args.append(f"--{arg_name}")
-                else:
-                    cmd_args.extend([f"--{arg_name}", "true" if value else "false"])
-            elif isinstance(value, dict):
-                # Letta/MCP often pass objects; plugins expect JSON on argv (not Python repr)
-                cmd_args.extend([f"--{arg_name}", json.dumps(value, separators=(',', ':'))])
-            elif isinstance(value, list):
-                # For arrays/lists, pass each element as a separate argument
-                # This works with argparse nargs="+" or nargs="*"
-                for item in value:
-                    cmd_args.extend([f"--{arg_name}", str(item)])
-            else:
-                cmd_args.extend([f"--{arg_name}", str(value)])
+            # Schema-aware rendering (booleans #37/#38; arrays/objects #56).
+            cmd_args.extend(
+                _render_tool_argument(arg_name, value, param_specs.get(arg_name))
+            )
         
         # Suppress verbose logging in STDIO mode
         if logger.level <= logging.INFO:
