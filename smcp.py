@@ -751,37 +751,35 @@ Examples:
     return parser.parse_args()
 
 
-async def async_main():
-    """Main entry point."""
-    load_letta_env_vars()
-    args = parse_arguments()
+def resolve_host(args) -> str:
+    """
+    Determine the bind host from parsed arguments.
 
-    # Determine host binding
+    --allow-external binds 0.0.0.0 (with a warning); otherwise the explicit
+    --host value is used (default 127.0.0.1, localhost-only).
+    """
     if args.allow_external:
-        host = "0.0.0.0"
         logger.warning("⚠️  WARNING: External connections are allowed. This may pose security risks.")
-    else:
-        host = args.host
-        if host == "127.0.0.1":
-            logger.info("🔒 Security: Server bound to localhost only. Use --allow-external for network access.")
-    
-    logger.info(f"Starting Sanctum Letta MCP Server on {host}:{args.port}...")
-    
-    # Create MCP server
-    global server
-    server = create_server(host, args.port)
-    
-    # Register plugin tools
-    register_plugin_tools(server)
-    
-    # Create SSE transport
-    sse_transport = SseServerTransport("/messages/")
-    
-    # Create Starlette app with SSE endpoints
+        return "0.0.0.0"
+    host = args.host
+    if host == "127.0.0.1":
+        logger.info("🔒 Security: Server bound to localhost only. Use --allow-external for network access.")
+    return host
+
+
+def build_app(sse_transport):
+    """
+    Build the Starlette ASGI app that exposes the MCP SSE transport.
+
+    Routes:
+      GET  /sse        -> establish SSE stream and run the MCP server over it
+      POST /sse        -> Letta-compat shim (messages belong on /messages/)
+      /messages/*      -> SSE transport POST handler (JSON-RPC ingress)
+    """
     from starlette.applications import Starlette
     from starlette.routing import Route, Mount
     from starlette.responses import Response
-    
+
     async def sse_endpoint(request):
         """SSE connection endpoint."""
         # Use SSE transport's connect_sse method with proper streams
@@ -796,7 +794,7 @@ async def async_main():
             )
         # Return empty response to avoid NoneType error
         return Response()
-    
+
     async def sse_post_endpoint(request):
         """Handle POST requests to /sse (for Letta compatibility)."""
         # Create a simple response for POST requests to /sse
@@ -818,13 +816,36 @@ async def async_main():
                 return Response("Empty POST request", status_code=400)
         except Exception as e:
             return Response(f"Error processing request: {str(e)}", status_code=500)
-    
-    # Create Starlette app
-    app = Starlette(routes=[
+
+    return Starlette(routes=[
         Route("/sse", sse_endpoint, methods=["GET"]),
         Route("/sse", sse_post_endpoint, methods=["POST"]),
         Mount("/messages/", app=sse_transport.handle_post_message),
     ])
+
+
+async def async_main():
+    """Main entry point."""
+    load_letta_env_vars()
+    args = parse_arguments()
+
+    # Determine host binding
+    host = resolve_host(args)
+
+    logger.info(f"Starting Sanctum Letta MCP Server on {host}:{args.port}...")
+    
+    # Create MCP server
+    global server
+    server = create_server(host, args.port)
+    
+    # Register plugin tools
+    register_plugin_tools(server)
+    
+    # Create SSE transport
+    sse_transport = SseServerTransport("/messages/")
+    
+    # Create Starlette app with SSE endpoints
+    app = build_app(sse_transport)
     
     # Start server with proper signal handling
     logger.info("Starting server with SSE transport...")

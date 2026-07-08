@@ -5,8 +5,9 @@ omit =
     .venv/*
     */site-packages/*
     plugins/*
+    run_tests.py
 
 [report]
 precision = 1
-fail_under = 35
+fail_under = 90
 show_missing = true
