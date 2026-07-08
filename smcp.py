@@ -39,6 +39,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import subprocess
 import sys
 import time
@@ -288,10 +289,14 @@ def get_plugin_help(plugin_name: str, cli_path: str) -> str:
 def get_plugin_describe(plugin_name: str, cli_path: str) -> Dict[str, Any] | None:
     """
     Get plugin description using --describe command (new method).
-    
-    Returns structured plugin spec or None if not supported.
-    Expected JSON format:
+
+    Returns the parsed plugin spec (a dict) or None when --describe is not
+    supported / unparseable. The payload is validated against the versioned
+    describe contract (v1) by the caller; the authoritative schema is
+    docs/plugin-contract/v1.json (see validate_describe_contract). Expected
+    JSON format:
     {
+        "contract_version": "1.0",
         "plugin": {
             "name": "plugin_name",
             "version": "1.0.0",
@@ -343,6 +348,111 @@ def get_plugin_describe(plugin_name: str, cli_path: str) -> Dict[str, Any] | Non
     except Exception as e:
         logger.debug(f"Plugin {plugin_name} --describe failed (will use fallback): {e}")
         return None
+
+
+# --- Plugin --describe contract (issue #47) --------------------------------
+# The authoritative, machine-checkable schema lives at
+# docs/plugin-contract/v1.json. This constant is the major contract version the
+# core implements; validate_describe_contract() enforces it at discovery time.
+DESCRIBE_CONTRACT_VERSION = "1.0"
+_DESCRIBE_ALLOWED_PARAM_TYPES = frozenset(
+    {"string", "number", "integer", "boolean", "array", "object"}
+)
+_COMMAND_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_describe_contract(spec: Any) -> List[str]:
+    """Validate a plugin's parsed ``--describe`` payload against contract v1.
+
+    Returns a list of human-readable, field-addressed error strings; an empty
+    list means the payload conforms. This is the programmatic mirror of
+    ``docs/plugin-contract/v1.json`` and is what the server uses at discovery
+    time so a malformed plugin is skipped with an actionable message rather than
+    degrading silently (issue #47).
+    """
+    errors: List[str] = []
+
+    if not isinstance(spec, dict):
+        return ["top-level --describe payload must be a JSON object"]
+
+    cv = spec.get("contract_version")
+    if cv is not None:
+        if not isinstance(cv, str):
+            errors.append("contract_version must be a string (e.g. \"1.0\")")
+        elif cv.split(".", 1)[0] != DESCRIBE_CONTRACT_VERSION.split(".", 1)[0]:
+            errors.append(
+                f"unsupported contract_version {cv!r}; this core implements "
+                f"contract v{DESCRIBE_CONTRACT_VERSION.split('.', 1)[0]}"
+            )
+
+    plugin = spec.get("plugin")
+    if plugin is not None:
+        if not isinstance(plugin, dict):
+            errors.append("plugin must be an object")
+        elif "name" in plugin and not (
+            isinstance(plugin["name"], str) and plugin["name"].strip()
+        ):
+            errors.append("plugin.name must be a non-empty string")
+
+    commands = spec.get("commands")
+    if commands is None:
+        errors.append("missing required 'commands' array")
+        return errors
+    if not isinstance(commands, list):
+        errors.append("'commands' must be an array")
+        return errors
+
+    for i, command in enumerate(commands):
+        loc = f"commands[{i}]"
+        if not isinstance(command, dict):
+            errors.append(f"{loc} must be an object")
+            continue
+
+        name = command.get("name")
+        if name is None:
+            errors.append(f"{loc}.name is required")
+        elif not isinstance(name, str) or not name.strip():
+            errors.append(f"{loc}.name must be a non-empty string")
+        elif not _COMMAND_NAME_RE.match(name):
+            errors.append(
+                f"{loc}.name {name!r} must match ^[a-zA-Z0-9_-]+$ "
+                "(it becomes part of the tool name)"
+            )
+
+        if "description" in command and not isinstance(command["description"], str):
+            errors.append(f"{loc}.description must be a string")
+
+        params = command.get("parameters")
+        if params is None:
+            continue
+        if not isinstance(params, list):
+            errors.append(f"{loc}.parameters must be an array")
+            continue
+
+        for j, param in enumerate(params):
+            ploc = f"{loc}.parameters[{j}]"
+            if not isinstance(param, dict):
+                errors.append(f"{ploc} must be an object")
+                continue
+
+            pname = param.get("name")
+            if pname is None:
+                errors.append(f"{ploc}.name is required")
+            elif not isinstance(pname, str) or not pname.strip():
+                errors.append(f"{ploc}.name must be a non-empty string")
+
+            ptype = param.get("type")
+            if ptype is not None and ptype not in _DESCRIBE_ALLOWED_PARAM_TYPES:
+                allowed = "|".join(sorted(_DESCRIBE_ALLOWED_PARAM_TYPES))
+                errors.append(f"{ploc}.type {ptype!r} is not one of {allowed}")
+
+            if "required" in param and not isinstance(param["required"], bool):
+                errors.append(f"{ploc}.required must be a boolean")
+
+            if "description" in param and not isinstance(param["description"], str):
+                errors.append(f"{ploc}.description must be a string")
+
+    return errors
 
 
 def parse_commands_from_help(help_text: str) -> List[str]:
@@ -921,8 +1031,21 @@ def register_plugin_tools(server: Server):
         
         # Try --describe first (new method)
         plugin_spec = get_plugin_describe(plugin_name, cli_path)
-        
+
         if plugin_spec:
+            # Enforce the versioned --describe contract (issue #47). A plugin
+            # that emits a describe payload but violates the contract is skipped
+            # with an actionable error rather than degrading silently.
+            contract_errors = validate_describe_contract(plugin_spec)
+            if contract_errors:
+                logger.error(
+                    "Plugin %s violates the --describe contract v%s and was skipped: %s",
+                    plugin_name,
+                    DESCRIBE_CONTRACT_VERSION,
+                    "; ".join(contract_errors),
+                )
+                continue
+
             # New method: use structured --describe output
             logger.info(f"Plugin {plugin_name}: Using --describe method for discovery")
             

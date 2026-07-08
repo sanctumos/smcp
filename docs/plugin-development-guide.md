@@ -44,6 +44,7 @@ The preferred method is implementing a `--describe` command that returns structu
 **JSON Format:**
 ```json
 {
+  "contract_version": "1.0",
   "plugin": {
     "name": "plugin_name",
     "version": "1.0.0",
@@ -66,6 +67,24 @@ The preferred method is implementing a `--describe` command that returns structu
   ]
 }
 ```
+
+**Contract (authoritative):** the `--describe` payload is governed by a versioned
+JSON Schema — [`docs/plugin-contract/v1.json`](plugin-contract/v1.json). That
+schema is the source of truth; this section is a readable summary. Key rules:
+
+- `commands` is **required** and must be an array; every command needs a `name`
+  matching `^[a-zA-Z0-9_-]+$` (it becomes part of the tool name `plugin__command`).
+- Parameter `type`, when given, must be one of
+  `string | number | integer | boolean | array | object`.
+- `contract_version` is recommended (`"1.0"`); the server accepts contract major
+  version `1`.
+
+At discovery the server validates each plugin's `--describe` against this
+contract. **A plugin that emits a describe payload violating the contract is
+skipped** with an actionable error naming the offending field (e.g.
+`commands[0].parameters[2].type 'str' is not one of ...`) rather than degrading
+silently. Plugins that don't implement `--describe` at all still fall back to
+help-text scraping (Method 2).
 
 ### Method 2: Help Text Scraping (Fallback)
 
@@ -312,7 +331,9 @@ def main():
 ```
 
 **Key Points:**
-- `--describe` should return valid JSON matching the expected format
+- `--describe` must return valid JSON conforming to the versioned contract
+  ([`docs/plugin-contract/v1.json`](plugin-contract/v1.json)); include
+  `"contract_version": "1.0"`.
 - Parameter types should be: `string`, `number`, `integer`, `boolean`, `array`, or `object`
 - Required parameters should have `"required": true`
 - Optional parameters should have `"required": false` and optionally a `"default"` value

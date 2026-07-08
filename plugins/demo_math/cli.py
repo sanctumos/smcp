@@ -14,6 +14,7 @@ import sys
 from typing import Any
 
 PLUGIN_SPEC: dict[str, Any] = {
+    "contract_version": "1.0",
     "plugin": {
         "name": "demo_math",
         "version": "1.0.0",

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Versioned plugin `--describe` contract with validation at discovery** (issue #47). Published the authoritative JSON Schema at `docs/plugin-contract/v1.json` (contract v1, with a recommended `contract_version` field). The server validates each plugin's `--describe` payload at discovery via `validate_describe_contract()`; a plugin that emits a describe payload but violates the contract is skipped with a field-addressed error (e.g. `commands[0].parameters[2].type 'str' is not one of ...`) rather than degrading silently. Plugins without `--describe` still fall back to help-text scraping. Bundled `demo_math` / `demo_text` now declare `"contract_version": "1.0"` and are checked against the published schema in CI (`jsonschema` test dep). Plugin dev guide points to the schema as the source of truth.
 - **Structured tool error/result contract** (issue #53): tool failures are now machine-distinguishable from success. `execute_plugin_tool` raises a typed `ToolError` (stable `code` + `message`) on every failure path, and the `call_tool` handler returns an MCP `CallToolResult` with `isError=true` and `structuredContent.error = {code, message}`. Codes: `invalid_tool_name`, `plugin_not_found`, `plugin_error`, `timeout`, `internal_error`. Plugins' structured `{"error": ...}` JSON still round-trips (as the `plugin_error` message). See the API reference for the condition→code table.
 
 ### Fixed

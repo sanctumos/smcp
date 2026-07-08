@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sanctumos.org/smcp/plugin-contract/v1.json",
+  "title": "Sanctum MCP plugin --describe contract, version 1",
+  "description": "Authoritative schema for the JSON a plugin CLI must print on `--describe`. The SMCP server discovers a plugin's tools from this payload. This is contract version 1 (contract_version major = 1).",
+  "type": "object",
+  "required": ["commands"],
+  "properties": {
+    "contract_version": {
+      "description": "Semantic version of the describe contract this payload targets. The server accepts major version 1. Recommended but optional for backward compatibility.",
+      "type": "string",
+      "pattern": "^1(\\.[0-9]+){0,2}$"
+    },
+    "plugin": {
+      "description": "Optional plugin-level metadata.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "commands": {
+      "description": "The commands this plugin exposes; each becomes an MCP tool named `<plugin>__<command>`.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/command" }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "command": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "description": "Command name. Combined with the plugin name into the tool name, which must match ^[a-zA-Z0-9_-]{1,64}$, so the command name is restricted to the same character class.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_-]+$"
+        },
+        "description": { "type": "string" },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "parameter": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "Declared JSON type. Drives schema-aware argument rendering (booleans, arrays, objects).",
+          "type": "string",
+          "enum": ["string", "number", "integer", "boolean", "array", "object"]
+        },
+        "description": { "type": "string" },
+        "required": { "type": "boolean" },
+        "default": {},
+        "items": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
