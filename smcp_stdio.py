@@ -9,6 +9,8 @@ clean for JSON-RPC protocol messages.
 Copyright (c) 2025 Mark Rizzn Hopkins
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import sys

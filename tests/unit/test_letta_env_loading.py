@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import importlib.util
 _spec = importlib.util.spec_from_file_location("smcp_module", Path(__file__).resolve().parent.parent.parent / "smcp.py")
 _smcp = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = _smcp
 _spec.loader.exec_module(_smcp)
 
 load_letta_env_vars = _smcp.load_letta_env_vars

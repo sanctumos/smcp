@@ -136,6 +136,7 @@ class TestDescribeIntegrationWithSmcp:
 
         spec = importlib.util.spec_from_file_location("smcp_module", REPO_ROOT / "smcp.py")
         mod = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = mod
         spec.loader.exec_module(mod)
 
         spec_json = mod.get_plugin_describe("demo_math", str(DEMO_MATH_CLI))

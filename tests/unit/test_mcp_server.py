@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import importlib.util
 spec = importlib.util.spec_from_file_location("smcp_module", "smcp.py")
 smcp_module = importlib.util.module_from_spec(spec)
+sys.modules[spec.name] = smcp_module
 spec.loader.exec_module(smcp_module)
 
 # Import the functions we want to test

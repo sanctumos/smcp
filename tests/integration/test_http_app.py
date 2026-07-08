@@ -19,6 +19,7 @@ _repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_repo_root))
 _spec = importlib.util.spec_from_file_location("smcp_module", str(_repo_root / "smcp.py"))
 smcp_module = importlib.util.module_from_spec(_spec)
+sys.modules[_spec.name] = smcp_module
 _spec.loader.exec_module(smcp_module)
 
 

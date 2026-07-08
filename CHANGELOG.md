@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Advertised Python 3.8/3.9 support is now real** (issue #48): added `from __future__ import annotations` to `smcp.py` and `smcp_stdio.py` (governor already had it) so the PEP 604 union annotations (`X | None`) are deferred and the modules import on 3.8/3.9. `requires-python >=3.8` is now truthful.
 - **Structured (array/object) tool arguments now round-trip to plugins as clean JSON** (issue #56): `execute_plugin_tool` renders array/object arguments schema-aware. Arrays of objects are serialized as a single `--name <json>` (no more Python `repr` on argv), object params and bare dicts are JSON-encoded, and Letta's single-child `{"item": ...}` array coercion is normalized centrally so array-typed params receive a real list. Scalar arrays still render as repeated flags (argparse `nargs`/`action=append`). This is the root-cause fix behind the `kitchen_pos` catering "recipients array required" failures.
 
 ### Changed
