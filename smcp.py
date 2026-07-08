@@ -41,6 +41,8 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
 
+import governor
+
 # Global variables
 server: Server | None = None
 plugin_registry: Dict[str, Dict[str, Any]] = {}
@@ -343,9 +345,30 @@ def parse_commands_from_help(help_text: str) -> List[str]:
     return commands
 
 
+def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
+    """Letta/models often send hyphenated JSON keys; plugins use argparse dest with underscores."""
+    if not isinstance(arguments, dict):
+        return arguments
+    out = dict(arguments)
+    if "payload_json" in out and "payload-json" in out:
+        del out["payload-json"]
+    elif "payload-json" in out and "payload_json" not in out:
+        out["payload_json"] = out.pop("payload-json")
+    if "catering_invoice_id" in out and "catering-invoice-id" in out:
+        del out["catering-invoice-id"]
+    elif "catering-invoice-id" in out and "catering_invoice_id" not in out:
+        out["catering_invoice_id"] = out.pop("catering-invoice-id")
+    if "invoice_command" in out and "invoice-command" in out:
+        del out["invoice-command"]
+    elif "invoice-command" in out and "invoice_command" not in out:
+        out["invoice_command"] = out.pop("invoice-command")
+    return out
+
+
 async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
     """Execute a plugin tool with the given arguments."""
     try:
+        arguments = _coalesce_tool_argument_aliases(arguments)
         # Parse tool name to get plugin and command
         # Tool names use double underscore separator: "plugin__command"
         # Support both double underscore (new) and dot (legacy) for backward compatibility
@@ -372,11 +395,15 @@ async def execute_plugin_tool(tool_name: str, arguments: dict) -> str:
         # Add arguments
         # Convert underscores to dashes for command-line arguments (standard convention)
         for key, value in arguments.items():
+            if value is None:
+                continue
             # Convert parameter name (use_ssl) to CLI argument (--use-ssl)
             arg_name = key.replace('_', '-')
             if isinstance(value, bool):
-                if value:
-                    cmd_args.append(f"--{arg_name}")
+                cmd_args.extend([f"--{arg_name}", "true" if value else "false"])
+            elif isinstance(value, dict):
+                # Letta/MCP often pass objects; plugins expect JSON on argv (not Python repr)
+                cmd_args.extend([f"--{arg_name}", json.dumps(value, separators=(',', ':'))])
             elif isinstance(value, list):
                 # For arrays/lists, pass each element as a separate argument
                 # This works with argparse nargs="+" or nargs="*"
@@ -681,26 +708,32 @@ def register_plugin_tools(server: Server):
                 logger.info(f"Created tool: {tool.name} (fallback method, no parameter schema)")
                 metrics["tools_registered"] += 1
     
+    governor.set_catalog(t.name for t in all_tools)
+    all_tools.append(governor.governor_tool())
+
     # Register the list_tools handler
     @server.list_tools()
     async def list_tools_handler():
-        """Return the list of available tools."""
-        # Suppress verbose logging in STDIO mode to avoid blocking
-        # Just return the tools immediately
-        return all_tools
-    
+        """Return attached tools (+ governor)."""
+        return governor.filter_tools(all_tools)
+
     # Register the call_tool handler
     @server.call_tool()
     async def call_tool_handler(tool_name: str, arguments: dict):
         """Handle tool calls."""
-        # Suppress verbose logging in STDIO mode
         if logger.level <= logging.INFO:
             logger.info(f"Tool call: {tool_name} with args: {arguments}")
         metrics["tool_calls_total"] += 1
+        if tool_name == governor.GOVERNOR_TOOL_NAME:
+            return [TextContent(type="text", text=governor.handle_governor(arguments))]
+        blocked = governor.gate_tool_call(tool_name)
+        if blocked is not None:
+            metrics["tool_calls_error"] += 1
+            return [TextContent(type="text", text=blocked)]
         try:
             result = await execute_plugin_tool(tool_name, arguments)
             if logger.level <= logging.INFO:
-                logger.info(f"Tool result: {result[:200]}...")  # Truncate long results
+                logger.info(f"Tool result: {result[:200]}...")
             return [TextContent(type="text", text=str(result))]
         except Exception as e:
             error_msg = f"Tool execution failed: {str(e)}"

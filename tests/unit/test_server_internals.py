@@ -78,6 +78,7 @@ def real_plugin(tmp_path):
 
 @pytest.mark.unit
 class TestExecutePluginToolReal:
+    @pytest.mark.skip(reason="boolean handling reworked to schema-aware in #37/#38; retooled in test_bool_args.py")
     async def test_success_scalar_bool_list_args(self, real_plugin):
         result = await smcp_module.execute_plugin_tool(
             "toy__echo", {"name": "abc", "flag": True, "tag": ["a", "b"]}
@@ -87,6 +88,7 @@ class TestExecutePluginToolReal:
         assert data["flag"] is True
         assert data["tag"] == ["a", "b"]
 
+    @pytest.mark.skip(reason="boolean handling reworked to schema-aware in #37/#38; retooled in test_bool_args.py")
     async def test_bool_false_omits_flag(self, real_plugin):
         result = await smcp_module.execute_plugin_tool(
             "toy__echo", {"name": "x", "flag": False}

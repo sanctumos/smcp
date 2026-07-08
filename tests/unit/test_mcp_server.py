@@ -487,14 +487,6 @@ class TestToolCreation:
         assert tool.name == "demo_math__coin_flip"
         assert "coin_flip" in tool.description
         assert tool.inputSchema["type"] == "object"
-
-    def test_create_tool_from_plugin_word_count(self):
-        """Test creating word_count tool without spec."""
-        tool = create_tool_from_plugin("demo_text", "word_count")
-
-        assert tool.name == "demo_text__word_count"
-        assert "word_count" in tool.description
-        assert tool.inputSchema["type"] == "object"
     
     def test_create_tool_from_plugin_with_spec(self):
         """Test creating tool with command spec."""
@@ -540,6 +532,14 @@ class TestToolCreation:
         
         assert "test-command" in tool.description
         assert tool.inputSchema["properties"] == {}
+
+    def test_create_tool_from_plugin_word_count(self):
+        """Test creating word_count tool without spec."""
+        tool = create_tool_from_plugin("demo_text", "word_count")
+
+        assert tool.name == "demo_text__word_count"
+        assert "word_count" in tool.description
+        assert tool.inputSchema["type"] == "object"
 
 
 @pytest.mark.unit

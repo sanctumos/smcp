@@ -57,3 +57,6 @@ plugins/smtp/__init__.py
 plugins/smtp/cli.py
 plugins/smtp/README.md
 plugins/smtp/smtp_client.py
+
+# Local otto githooks install marker
+.otto-githooks-installed
