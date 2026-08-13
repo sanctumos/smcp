@@ -49,9 +49,11 @@ git fetch origin && git checkout dev && git pull origin dev
 
 ## 📦 Installation
 
+> **MCP SDK pin:** Install **`mcp>=1.10.1,<2`**. SDK **2.0.0** breaks SMCP today (decorators removed) — see GitHub [#57](https://github.com/sanctumos/smcp/issues/57). Do not `pip install -U mcp` into 2.x until that port ships.
+
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - pip
 
 ### Quick Start

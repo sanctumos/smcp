@@ -41,6 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+
+- **Pin `mcp>=1.10.1,<2`** (issue [#57](https://github.com/sanctumos/smcp/issues/57)). MCP Python SDK **2.0.0** removed the low-level `Server.list_tools` / `call_tool` decorator API SMCP still uses; unpinned installs crash at plugin registration. This is a stop-bleed pin until the mcp 2 port slices land.
+
 ### Added
 
 - *(nothing yet)*
