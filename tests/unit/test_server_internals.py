@@ -353,10 +353,12 @@ class TestRegisterHandlers:
         assert "toy__connect" not in names
         assert "toy__disconnect" not in names
 
-        # call_tool handler success -> normal content (isError=False)
+        # call_tool handler success -> CallToolResult (isError=False)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(return_value="ok-result")):
             out = await captured["call"]("toy__echo", {})
-        assert out[0].text == "ok-result"
+        assert isinstance(out, smcp_module.CallToolResult)
+        assert out.isError is False
+        assert out.content[0].text == "ok-result"
 
         # call_tool handler unexpected error -> structured CallToolResult(isError=True)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(side_effect=RuntimeError("bad"))):
@@ -407,7 +409,9 @@ class TestRegisterHandlers:
 
         ctx.governor.set_catalog(["toy__echo"])
         out = await captured["call"](GOVERNOR_TOOL_NAME, {"action": "list-available"})
-        payload = json.loads(out[0].text)
+        assert isinstance(out, smcp_module.CallToolResult)
+        assert out.isError is False
+        payload = json.loads(out.content[0].text)
         assert "toy__echo" in payload["tools"]
         assert ctx.metrics["tool_calls_total"] == 1
 
@@ -444,8 +448,10 @@ class TestRegisterHandlers:
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock()) as exec_mock:
             out = await captured["call"]("toy__echo", {})
         exec_mock.assert_not_awaited()
-        assert out[0].text
-        payload = json.loads(out[0].text)
+        assert isinstance(out, smcp_module.CallToolResult)
+        assert out.isError is False
+        assert out.content[0].text
+        payload = json.loads(out.content[0].text)
         assert payload["error"] == "tool_not_attached"
         assert ctx.metrics["tool_calls_error"] == 1
 

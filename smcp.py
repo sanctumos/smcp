@@ -745,6 +745,15 @@ def _tool_error_result(code: str, message: str) -> CallToolResult:
     )
 
 
+def _tool_text_result(text: str) -> CallToolResult:
+    """Build a successful MCP tool result with a single text content block.
+
+    Always returning ``CallToolResult`` (not a bare content list) matches the
+    mcp 2.0 low-level contract and keeps success/error shapes consistent.
+    """
+    return CallToolResult(content=[TextContent(type="text", text=text)])
+
+
 async def execute_plugin_tool(
     tool_name: str,
     arguments: dict,
@@ -1162,16 +1171,16 @@ def register_plugin_tools(server: Server, ctx: ServerContext | None = None):
             logger.info(f"Tool call: {tool_name} with args: {arguments}")
         ctx.metrics["tool_calls_total"] += 1
         if tool_name == GOVERNOR_TOOL_NAME:
-            return [TextContent(type="text", text=gov.handle(arguments))]
+            return _tool_text_result(gov.handle(arguments))
         blocked = gov.gate_tool_call(tool_name)
         if blocked is not None:
             ctx.metrics["tool_calls_error"] += 1
-            return [TextContent(type="text", text=blocked)]
+            return _tool_text_result(blocked)
         try:
             result = await execute_plugin_tool(tool_name, arguments, ctx)
             if logger.level <= logging.INFO:
                 logger.info(f"Tool result: {result[:200]}...")
-            return [TextContent(type="text", text=str(result))]
+            return _tool_text_result(str(result))
         except ToolError as te:
             # Structured failure (already counted in execute_plugin_tool).
             return _tool_error_result(te.code, te.message)
