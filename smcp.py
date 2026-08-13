@@ -1152,14 +1152,10 @@ def register_plugin_tools(server: Server, ctx: ServerContext | None = None):
     gov.set_catalog(t.name for t in all_tools)
     all_tools.append(gov.governor_tool())
 
-    # Register the list_tools handler
-    @server.list_tools()
     async def list_tools_handler():
         """Return attached tools (+ governor)."""
         return gov.filter_tools(all_tools)
 
-    # Register the call_tool handler
-    @server.call_tool()
     async def call_tool_handler(tool_name: str, arguments: dict):
         """Handle tool calls."""
         if logger.level <= logging.INFO:
@@ -1183,6 +1179,27 @@ def register_plugin_tools(server: Server, ctx: ServerContext | None = None):
             # Unexpected failure at the handler boundary.
             ctx.metrics["tool_calls_error"] += 1
             return _tool_error_result("internal_error", f"Tool execution failed: {str(e)}")
+
+    bind_mcp_tool_handlers(server, list_tools_handler, call_tool_handler)
+
+
+def bind_mcp_tool_handlers(server: Server, list_tools_handler, call_tool_handler) -> None:
+    """Attach list/call handlers via the mcp 1.x decorator API.
+
+    mcp 2.0 removed ``Server.list_tools`` / ``call_tool`` decorators (issue #57).
+    This adapter keeps 1.x working and fails loudly on 2.x until the port lands.
+    Test doubles that implement the same decorator methods continue to work.
+    """
+    list_reg = getattr(server, "list_tools", None)
+    call_reg = getattr(server, "call_tool", None)
+    if not callable(list_reg) or not callable(call_reg):
+        raise RuntimeError(
+            "MCP Server is missing list_tools/call_tool decorators "
+            "(mcp>=2.0 is unsupported until issue #57 lands). "
+            "Pin mcp>=1.10.1,<2."
+        )
+    list_reg()(list_tools_handler)
+    call_reg()(call_tool_handler)
 
 
 def _package_version() -> str:

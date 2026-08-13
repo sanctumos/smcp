@@ -276,6 +276,40 @@ class TestArgsHostServer:
 
 @pytest.mark.unit
 class TestRegisterHandlers:
+    def test_bind_mcp_tool_handlers_requires_decorators(self):
+        """mcp 2.0 servers lack list_tools/call_tool; fail with a clear pin hint."""
+        class NoDecorators:
+            pass
+
+        with pytest.raises(RuntimeError, match="mcp>=2.0 is unsupported|#57|Pin mcp"):
+            smcp_module.bind_mcp_tool_handlers(NoDecorators(), lambda: None, lambda *a: None)
+
+    def test_bind_mcp_tool_handlers_registers_via_decorators(self):
+        captured = {}
+
+        class CapSrv:
+            def list_tools(self):
+                def deco(fn):
+                    captured["list"] = fn
+                    return fn
+                return deco
+
+            def call_tool(self):
+                def deco(fn):
+                    captured["call"] = fn
+                    return fn
+                return deco
+
+        async def list_h():
+            return ["ok"]
+
+        async def call_h(name, args):
+            return name
+
+        smcp_module.bind_mcp_tool_handlers(CapSrv(), list_h, call_h)
+        assert captured["list"] is list_h
+        assert captured["call"] is call_h
+
     async def test_handlers_and_connect_skip(self):
         real_server = smcp_module.create_server()
         describe = {
