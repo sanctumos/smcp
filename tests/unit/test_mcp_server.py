@@ -483,8 +483,8 @@ class TestToolCreation:
 
         assert tool.name == "demo_math__calculate"
         assert "calculate" in tool.description
-        assert tool.inputSchema["type"] == "object"
-        assert tool.inputSchema["properties"] == {}
+        assert tool.input_schema["type"] == "object"
+        assert tool.input_schema["properties"] == {}
 
     def test_create_tool_from_plugin_coin_flip(self):
         """Test creating coin_flip tool without spec."""
@@ -492,7 +492,7 @@ class TestToolCreation:
 
         assert tool.name == "demo_math__coin_flip"
         assert "coin_flip" in tool.description
-        assert tool.inputSchema["type"] == "object"
+        assert tool.input_schema["type"] == "object"
     
     def test_create_tool_from_plugin_with_spec(self):
         """Test creating tool with command spec."""
@@ -521,11 +521,11 @@ class TestToolCreation:
         
         assert tool.name == "test_plugin__test-command"
         assert tool.description == "Test command description"
-        assert "param1" in tool.inputSchema["properties"]
-        assert "param2" in tool.inputSchema["properties"]
-        assert "param1" in tool.inputSchema["required"]
-        assert "param2" not in tool.inputSchema["required"]
-        assert tool.inputSchema["properties"]["param2"]["default"] == 10
+        assert "param1" in tool.input_schema["properties"]
+        assert "param2" in tool.input_schema["properties"]
+        assert "param1" in tool.input_schema["required"]
+        assert "param2" not in tool.input_schema["required"]
+        assert tool.input_schema["properties"]["param2"]["default"] == 10
     
     def test_create_tool_from_plugin_with_spec_no_description(self):
         """Test creating tool with spec but no description."""
@@ -537,7 +537,7 @@ class TestToolCreation:
         tool = create_tool_from_plugin("test_plugin", "test-command", command_spec)
         
         assert "test-command" in tool.description
-        assert tool.inputSchema["properties"] == {}
+        assert tool.input_schema["properties"] == {}
 
     def test_create_tool_from_plugin_word_count(self):
         """Test creating word_count tool without spec."""
@@ -545,7 +545,7 @@ class TestToolCreation:
 
         assert tool.name == "demo_text__word_count"
         assert "word_count" in tool.description
-        assert tool.inputSchema["type"] == "object"
+        assert tool.input_schema["type"] == "object"
 
 
 @pytest.mark.unit

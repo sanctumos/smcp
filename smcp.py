@@ -740,8 +740,8 @@ def _tool_error_result(code: str, message: str) -> CallToolResult:
     """Build an MCP error result that is machine-distinguishable from success."""
     return CallToolResult(
         content=[TextContent(type="text", text=message)],
-        isError=True,
-        structuredContent={"error": {"code": code, "message": message}},
+        is_error=True,
+        structured_content={"error": {"code": code, "message": message}},
     )
 
 
@@ -1068,7 +1068,7 @@ def create_tool_from_plugin(plugin_name: str, command: str, command_spec: Dict[s
     return Tool(
         name=tool_name,
         description=description,
-        inputSchema=input_schema
+        input_schema=input_schema
     )
 
 
@@ -1193,22 +1193,47 @@ def register_plugin_tools(server: Server, ctx: ServerContext | None = None):
 
 
 def bind_mcp_tool_handlers(server: Server, list_tools_handler, call_tool_handler) -> None:
-    """Attach list/call handlers via the mcp 1.x decorator API.
+    """Attach list/call handlers for mcp 1.x (decorators) or mcp 2.x (request handlers).
 
-    mcp 2.0 removed ``Server.list_tools`` / ``call_tool`` decorators (issue #57).
-    This adapter keeps 1.x working and fails loudly on 2.x until the port lands.
-    Test doubles that implement the same decorator methods continue to work.
+    Handler shapes expected by this function (stable across SDK majors):
+
+    - ``list_tools_handler()`` → ``list[Tool]`` (or already a ``ListToolsResult``)
+    - ``call_tool_handler(tool_name, arguments)`` → ``CallToolResult``
+
+    mcp 2.0 removed ``Server.list_tools`` / ``call_tool`` decorators (issue #57) and
+    requires ``(ctx, params) -> Result`` handlers. We adapt here so product code
+    keeps the simple signatures above.
     """
     list_reg = getattr(server, "list_tools", None)
     call_reg = getattr(server, "call_tool", None)
-    if not callable(list_reg) or not callable(call_reg):
+    if callable(list_reg) and callable(call_reg):
+        list_reg()(list_tools_handler)
+        call_reg()(call_tool_handler)
+        return
+
+    add_handler = getattr(server, "add_request_handler", None)
+    if not callable(add_handler):
         raise RuntimeError(
-            "MCP Server is missing list_tools/call_tool decorators "
-            "(mcp>=2.0 is unsupported until issue #57 lands). "
-            "Pin mcp>=1.10.1,<2."
+            "MCP Server exposes neither list_tools/call_tool decorators nor "
+            "add_request_handler (unsupported mcp SDK). See issue #57."
         )
-    list_reg()(list_tools_handler)
-    call_reg()(call_tool_handler)
+
+    from mcp.types import CallToolRequestParams, ListToolsResult, PaginatedRequestParams
+
+    async def on_list_tools(_ctx, _params):
+        tools = await list_tools_handler()
+        if isinstance(tools, ListToolsResult):
+            return tools
+        return ListToolsResult(tools=list(tools))
+
+    async def on_call_tool(_ctx, params: CallToolRequestParams):
+        arguments = params.arguments or {}
+        if not isinstance(arguments, dict):
+            arguments = dict(arguments)
+        return await call_tool_handler(params.name, arguments)
+
+    add_handler("tools/list", PaginatedRequestParams, on_list_tools)
+    add_handler("tools/call", CallToolRequestParams, on_call_tool)
 
 
 def _package_version() -> str:

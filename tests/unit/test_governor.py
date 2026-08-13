@@ -34,10 +34,10 @@ def gov(monkeypatch):
 
 def _sample_tools():
     return [
-        Tool(name="tasks__create-task", description="create", inputSchema={"type": "object"}),
-        Tool(name="tasks__list-users", description="admin", inputSchema={"type": "object"}),
-        Tool(name="tasks__get-document", description="doc", inputSchema={"type": "object"}),
-        Tool(name="kitchen_pos_partner__menu", description="menu", inputSchema={"type": "object"}),
+        Tool(name="tasks__create-task", description="create", input_schema={"type": "object"}),
+        Tool(name="tasks__list-users", description="admin", input_schema={"type": "object"}),
+        Tool(name="tasks__get-document", description="doc", input_schema={"type": "object"}),
+        Tool(name="kitchen_pos_partner__menu", description="menu", input_schema={"type": "object"}),
     ]
 
 

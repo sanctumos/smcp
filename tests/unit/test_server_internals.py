@@ -277,11 +277,11 @@ class TestArgsHostServer:
 @pytest.mark.unit
 class TestRegisterHandlers:
     def test_bind_mcp_tool_handlers_requires_decorators(self):
-        """mcp 2.0 servers lack list_tools/call_tool; fail with a clear pin hint."""
+        """Servers with neither 1.x decorators nor 2.x add_request_handler fail clearly."""
         class NoDecorators:
             pass
 
-        with pytest.raises(RuntimeError, match="mcp>=2.0 is unsupported|#57|Pin mcp"):
+        with pytest.raises(RuntimeError, match="add_request_handler|unsupported mcp SDK|#57"):
             smcp_module.bind_mcp_tool_handlers(NoDecorators(), lambda: None, lambda *a: None)
 
     def test_bind_mcp_tool_handlers_registers_via_decorators(self):
@@ -310,6 +310,52 @@ class TestRegisterHandlers:
         assert captured["list"] is list_h
         assert captured["call"] is call_h
 
+    async def test_bind_mcp_tool_handlers_mcp2_add_request_handler(self):
+        """mcp 2 path: wrap v1-shaped handlers onto add_request_handler."""
+        from mcp.types import CallToolRequestParams, ListToolsResult, Tool
+
+        recorded = {}
+
+        class Mcp2Srv:
+            def add_request_handler(self, method, params_type, handler):
+                recorded[method] = (params_type, handler)
+
+        async def list_h():
+            return [Tool(name="demo__x", description="d", input_schema={"type": "object"})]
+
+        async def call_h(name, args):
+            return smcp_module._tool_text_result(f"{name}:{sorted(args.items())}")
+
+        smcp_module.bind_mcp_tool_handlers(Mcp2Srv(), list_h, call_h)
+        assert "tools/list" in recorded
+        assert "tools/call" in recorded
+
+        list_result = await recorded["tools/list"][1](None, None)
+        assert isinstance(list_result, ListToolsResult)
+        assert list_result.tools[0].name == "demo__x"
+
+        # Already-wrapped ListToolsResult passthrough
+        async def list_wrapped():
+            return ListToolsResult(tools=[])
+
+        recorded.clear()
+        smcp_module.bind_mcp_tool_handlers(Mcp2Srv(), list_wrapped, call_h)
+        wrapped = await recorded["tools/list"][1](None, None)
+        assert isinstance(wrapped, ListToolsResult)
+        assert wrapped.tools == []
+
+        params = CallToolRequestParams(name="demo__x", arguments={"a": 1})
+        call_result = await recorded["tools/call"][1](None, params)
+        assert "demo__x" in call_result.content[0].text
+
+        # Non-dict arguments coerced to dict
+        class Mappingish(dict):
+            pass
+
+        params2 = CallToolRequestParams(name="demo__x", arguments=Mappingish(b=2))
+        out2 = await recorded["tools/call"][1](None, params2)
+        assert "demo__x" in out2.content[0].text
+
     async def test_handlers_and_connect_skip(self):
         real_server = smcp_module.create_server()
         describe = {
@@ -324,10 +370,7 @@ class TestRegisterHandlers:
              patch.object(smcp_module, "get_plugin_describe", return_value=describe):
             smcp_module.register_plugin_tools(real_server)
 
-        # list_tools handler registered -> exercise it
-        list_handler = real_server.request_handlers
-        # Call the registered handlers through the captured closures instead:
-        # re-register with capture to call directly
+        # Re-register against a capture double so we can invoke handlers directly
         captured = {}
 
         class CapSrv:
@@ -353,20 +396,20 @@ class TestRegisterHandlers:
         assert "toy__connect" not in names
         assert "toy__disconnect" not in names
 
-        # call_tool handler success -> CallToolResult (isError=False)
+        # call_tool handler success -> CallToolResult (is_error=False)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(return_value="ok-result")):
             out = await captured["call"]("toy__echo", {})
         assert isinstance(out, smcp_module.CallToolResult)
-        assert out.isError is False
+        assert out.is_error is False
         assert out.content[0].text == "ok-result"
 
-        # call_tool handler unexpected error -> structured CallToolResult(isError=True)
+        # call_tool handler unexpected error -> structured CallToolResult(is_error=True)
         with patch.object(smcp_module, "execute_plugin_tool", new=AsyncMock(side_effect=RuntimeError("bad"))):
             out = await captured["call"]("toy__echo", {})
         assert isinstance(out, smcp_module.CallToolResult)
-        assert out.isError is True
+        assert out.is_error is True
         assert "Tool execution failed" in out.content[0].text
-        assert out.structuredContent["error"]["code"] == "internal_error"
+        assert out.structured_content["error"]["code"] == "internal_error"
 
         # call_tool handler structured ToolError -> code preserved
         with patch.object(
@@ -375,8 +418,8 @@ class TestRegisterHandlers:
         ):
             out = await captured["call"]("toy__echo", {})
         assert isinstance(out, smcp_module.CallToolResult)
-        assert out.isError is True
-        assert out.structuredContent["error"]["code"] == "plugin_error"
+        assert out.is_error is True
+        assert out.structured_content["error"]["code"] == "plugin_error"
         assert out.content[0].text == "boom"
 
     async def test_call_tool_routes_governor_tool(self):
@@ -410,7 +453,7 @@ class TestRegisterHandlers:
         ctx.governor.set_catalog(["toy__echo"])
         out = await captured["call"](GOVERNOR_TOOL_NAME, {"action": "list-available"})
         assert isinstance(out, smcp_module.CallToolResult)
-        assert out.isError is False
+        assert out.is_error is False
         payload = json.loads(out.content[0].text)
         assert "toy__echo" in payload["tools"]
         assert ctx.metrics["tool_calls_total"] == 1
@@ -449,7 +492,7 @@ class TestRegisterHandlers:
             out = await captured["call"]("toy__echo", {})
         exec_mock.assert_not_awaited()
         assert isinstance(out, smcp_module.CallToolResult)
-        assert out.isError is False
+        assert out.is_error is False
         assert out.content[0].text
         payload = json.loads(out.content[0].text)
         assert payload["error"] == "tool_not_attached"
@@ -555,4 +598,4 @@ class TestLettaEnvBranches:
             def __exit__(self, *a): return False
 
         with patch.object(smcp_module.urllib.request, "urlopen", return_value=FakeResp()):
-            smcp_module.load_letta_env_vars()  # should handle gracefully
+            smcp_module.load_letta_env_vars()  # should handle gr

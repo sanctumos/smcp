@@ -209,7 +209,7 @@ class Governor:
         return Tool(
             name=GOVERNOR_TOOL_NAME,
             description="Sanctum SMCP governor: help, list/attach/detach tools, apply profiles.",
-            inputSchema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "action": {
