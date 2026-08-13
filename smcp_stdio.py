@@ -15,6 +15,12 @@ import asyncio
 import logging
 import sys
 
+# ExceptionGroup is builtin on 3.11+. On 3.10, anyio raises the backport type;
+# a bare `except ExceptionGroup` is a NameError there and turns KeyboardInterrupt
+# into SystemExit(1) (CI Python 3.10).
+if sys.version_info < (3, 11):  # pragma: no cover - CI Python 3.10
+    from exceptiongroup import BaseExceptionGroup, ExceptionGroup
+
 # Configure minimal logging FIRST - WARNING/ERROR only, to stderr
 # This must happen before importing smcp to catch all logging
 logging.basicConfig(

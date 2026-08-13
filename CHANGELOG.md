@@ -53,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- *(nothing yet)*
+- **Python 3.10 STDIO entry no longer NameErrors on `ExceptionGroup`** (CI). Import the `exceptiongroup` backport on 3.10 so Windows flush-group handling and KeyboardInterrupt stay well-defined (`except ExceptionGroup` is not a builtin name before 3.11).
 
 ## [3.0.3] - 2026-07-08
 

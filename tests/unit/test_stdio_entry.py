@@ -17,6 +17,9 @@ from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 
+if sys.version_info < (3, 11):
+    from exceptiongroup import BaseExceptionGroup, ExceptionGroup
+
 import smcp  # noqa: F401 - resolves to smcp.py; imported for clarity/isolation
 import smcp_stdio
 
