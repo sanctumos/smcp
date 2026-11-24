@@ -117,6 +117,82 @@ class TestBuildAppRoutes:
         status = next(m["status"] for m in sent if m["type"] == "http.response.start")
         assert status == 500
 
+    def test_build_app_requires_session_manager_with_streamable(self):
+        fake_asgi = MagicMock()
+        with pytest.raises(ValueError, match="session_manager"):
+            smcp_module.build_app(
+                _FakeSseTransport(),
+                streamable_http_app=fake_asgi,
+                session_manager=None,
+            )
+
+
+@pytest.mark.integration
+class TestStreamableHttpWiring:
+    """Streamable HTTP /mcp is additive; SSE routes stay intact."""
+
+    async def test_mcp_route_reachable_with_lifespan(self):
+        """Two sequential /mcp hits succeed — session manager stays alive across requests."""
+        ctx = smcp_module.ServerContext.create()
+        smcp_module.create_server(ctx)
+        smcp_module.register_plugin_tools(ctx.server, ctx)
+
+        session_manager = smcp_module.create_streamable_http_session_manager(ctx.server)
+        streamable_asgi = smcp_module.StreamableHTTPASGIApp(session_manager)
+        app = smcp_module.build_app(
+            _FakeSseTransport(),
+            ctx=ctx,
+            streamable_http_app=streamable_asgi,
+            session_manager=session_manager,
+        )
+
+        # httpx 0.28 ASGITransport no longer drives lifespan; enter the same
+        # manager.run() Starlette lifespan would, so sequential requests share it.
+        headers = {
+            "accept": "application/json, text/event-stream",
+            "content-type": "application/json",
+        }
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "smcp-test", "version": "0"},
+            },
+        }
+        transport = httpx.ASGITransport(app=app)
+        async with session_manager.run():
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+                r1 = await c.post(smcp_module.STREAMABLE_HTTP_PATH, json=body, headers=headers)
+                r2 = await c.post(smcp_module.STREAMABLE_HTTP_PATH, json=body, headers=headers)
+
+        assert r1.status_code != 404
+        assert r2.status_code != 404
+        # Without a live manager, the ASGI app raises; a 4xx/2xx from the
+        # transport itself means mount + run() are wired.
+        assert r1.status_code < 500 or "Task group" not in r1.text
+        assert r2.status_code < 500 or "Task group" not in r2.text
+
+    async def test_sse_routes_unchanged_when_streamable_mounted(self):
+        ctx = smcp_module.ServerContext.create()
+        smcp_module.create_server(ctx)
+        session_manager = smcp_module.create_streamable_http_session_manager(ctx.server)
+        streamable_asgi = smcp_module.StreamableHTTPASGIApp(session_manager)
+        app = smcp_module.build_app(
+            _FakeSseTransport(),
+            ctx=ctx,
+            streamable_http_app=streamable_asgi,
+            session_manager=session_manager,
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as c:
+            r = await c.post("/sse", content=b'{"jsonrpc":"2.0"}')
+        assert r.status_code == 400
+        assert "/messages/" in r.text
+
 
 @pytest.mark.integration
 class TestAsyncMainOrchestration:

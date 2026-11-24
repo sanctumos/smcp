@@ -34,6 +34,7 @@ __url__ = "https://sanctumos.org"
 
 import argparse
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
@@ -51,9 +52,19 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Sequence
 from mcp.server import Server
 from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http_manager import (
+    StreamableHTTPASGIApp,
+    StreamableHTTPSessionManager,
+)
 from mcp.types import CallToolResult, TextContent, Tool
 
 from governor import GOVERNOR_TOOL_NAME, Governor
+
+# Streamable HTTP (MCP 2.x) — additive third transport alongside classic SSE.
+# Path matches the SDK's own streamable_http_app default. Idle timeout is the
+# value the SDK docs recommend for stateful sessions (30 minutes).
+STREAMABLE_HTTP_PATH = "/mcp"
+STREAMABLE_HTTP_IDLE_TIMEOUT_SECONDS = 1800.0
 
 # Logging is configured explicitly at server start (configure_logging), never at
 # import time — importing this module must have no filesystem or root-logger
@@ -1460,21 +1471,49 @@ def resolve_host(args) -> str:
     return host
 
 
+def create_streamable_http_session_manager(
+    server: Server,
+    *,
+    session_idle_timeout: float = STREAMABLE_HTTP_IDLE_TIMEOUT_SECONDS,
+) -> StreamableHTTPSessionManager:
+    """
+    Build a StreamableHTTPSessionManager on the same MCP ``Server`` used for SSE.
+
+    One manager per process. Callers must keep ``manager.run()`` open for the
+    whole uvicorn lifetime (Starlette lifespan) or requests to ``/mcp`` raise.
+    """
+    return StreamableHTTPSessionManager(
+        app=server,
+        event_store=None,
+        json_response=False,
+        stateless=False,
+        session_idle_timeout=session_idle_timeout,
+    )
+
+
 def build_app(
     sse_transport,
     auth_config: Optional[AuthConfig] = None,
     ctx: ServerContext | None = None,
+    *,
+    streamable_http_app=None,
+    session_manager: StreamableHTTPSessionManager | None = None,
 ):
     """
-    Build the Starlette ASGI app that exposes the MCP SSE transport.
+    Build the Starlette ASGI app that exposes MCP over HTTP.
 
     Routes:
       GET  /sse        -> establish SSE stream and run the MCP server over it
       POST /sse        -> Letta-compat shim (messages belong on /messages/)
       /messages/*      -> SSE transport POST handler (JSON-RPC ingress)
+      /mcp             -> Streamable HTTP (when streamable_http_app is provided)
+
+    Classic SSE routes are unchanged. Streamable HTTP is additive: pass the
+    ASGI app from ``StreamableHTTPASGIApp(session_manager)`` and the matching
+    ``session_manager`` so Starlette lifespan keeps ``manager.run()`` alive.
 
     When auth_config enforces credentials, the app is wrapped in AuthMiddleware
-    so every HTTP request is checked before it reaches a route.
+    so every HTTP request (SSE and Streamable HTTP) is checked before a route.
     """
     from starlette.applications import Starlette
     from starlette.routing import Route, Mount
@@ -1522,11 +1561,27 @@ def build_app(
         except Exception as e:
             return Response(f"Error processing request: {str(e)}", status_code=500)
 
-    app = Starlette(routes=[
+    routes = [
         Route("/sse", sse_endpoint, methods=["GET"]),
         Route("/sse", sse_post_endpoint, methods=["POST"]),
         Mount("/messages/", app=sse_transport.handle_post_message),
-    ])
+    ]
+
+    lifespan = None
+    if streamable_http_app is not None:
+        if session_manager is None:
+            raise ValueError(
+                "session_manager is required when streamable_http_app is provided "
+                "(Starlette lifespan must keep StreamableHTTPSessionManager.run() open)."
+            )
+        routes.append(Route(STREAMABLE_HTTP_PATH, endpoint=streamable_http_app))
+
+        @contextlib.asynccontextmanager
+        async def lifespan(app):  # noqa: F811 — Starlette lifespan callback
+            async with session_manager.run():
+                yield
+
+    app = Starlette(routes=routes, lifespan=lifespan)
 
     if auth_config is not None and auth_config.enforce:
         return AuthMiddleware(app, auth_config)
@@ -1579,14 +1634,27 @@ async def async_main():
     # Register plugin tools
     register_plugin_tools(ctx.server, ctx)
     
-    # Create SSE transport
+    # Create SSE transport (classic Letta/HTTP path — unchanged)
     sse_transport = SseServerTransport("/messages/")
-    
-    # Create Starlette app with SSE endpoints
-    app = build_app(sse_transport, auth_config, ctx)
+
+    # Streamable HTTP on the same Server instance (additive /mcp)
+    session_manager = create_streamable_http_session_manager(ctx.server)
+    streamable_asgi = StreamableHTTPASGIApp(session_manager)
+
+    # Create Starlette app with SSE + Streamable HTTP
+    app = build_app(
+        sse_transport,
+        auth_config,
+        ctx,
+        streamable_http_app=streamable_asgi,
+        session_manager=session_manager,
+    )
     
     # Start server with proper signal handling
-    logger.info("Starting server with SSE transport...")
+    logger.info(
+        "Starting server with SSE (/sse, /messages/) and Streamable HTTP (%s)...",
+        STREAMABLE_HTTP_PATH,
+    )
     import uvicorn
     import signal
     
