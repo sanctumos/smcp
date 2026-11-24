@@ -2,6 +2,8 @@
 
 This guide covers deploying SMCP in production environments, including systemd services, Docker containers, and reverse proxy configurations.
 
+**HTTP endpoints on one process:** classic SSE at `/sse` + `/messages/`, and Streamable HTTP at `/mcp`. API-key auth (`MCP_API_KEY` / `MCP_API_KEYS`) applies to all HTTP paths the same way. Proxy both `/sse`, `/messages/`, and `/mcp` if clients use Streamable HTTP.
+
 ## 🚀 Production Deployment Options
 
 ### Option 1: System Service (Recommended for Linux)

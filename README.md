@@ -9,9 +9,9 @@
 
 SMCP is a plugin-based Model Context Protocol (MCP) server for the [Letta](https://www.letta.com/)
 agentic AI framework. It gives AI clients a clean, discoverable path to external tools through a
-plug-and-play plugin architecture, and it speaks the base MCP protocol over both **SSE** (for
-remote/HTTP clients like Letta) and **STDIO** (for local clients). SMCP is a SanctumOS core module,
-maintained by the Sanctum team.
+plug-and-play plugin architecture, and it speaks the base MCP protocol over **SSE** and
+**Streamable HTTP** (for remote/HTTP clients like Letta) and **STDIO** (for local clients). SMCP is a
+SanctumOS core module, maintained by the Sanctum team.
 
 > **Fork note:** This is the **Sanctum** edition (`sanctumos/smcp`). An Animus-branded fork lives at
 > `AnimusUNO/smcp`; the two track each other but carry their own branding.
@@ -20,7 +20,7 @@ maintained by the Sanctum team.
 
 - **Plugin architecture** — drop a CLI plugin in a directory and its commands become MCP tools; no core changes required
 - **MCP protocol compliant** — full support for the Model Context Protocol specification
-- **Two transports** — bidirectional **SSE** (`smcp.py`) for Letta and remote clients, and **STDIO** (`smcp_stdio.py`) for local clients
+- **Three transports** — bidirectional **SSE** (`GET /sse` + `POST /messages/`) and **Streamable HTTP** (`/mcp`) from `smcp.py` for remote clients, plus **STDIO** (`smcp_stdio.py`) for local clients. Classic SSE stays fully supported.
 - **Auto-discovery** — plugins are discovered at startup via a `--describe` contract (with `--help` scraping as a fallback)
 - **Schema-aware arguments** — booleans and other typed args are rendered onto plugin argv per each plugin's declared schema
 - **Optional API-key authentication** — shared-secret auth for the HTTP/SSE transport, fail-closed on external binds
@@ -70,11 +70,24 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the server (SSE transport)
+# Run the server (SSE + Streamable HTTP on one process)
 python smcp.py
 ```
 
 The server starts on `http://localhost:8000` by default, bound to **localhost only** for security.
+Same process serves classic SSE at `/sse` + `/messages/` and Streamable HTTP at `/mcp`.
+
+Example Streamable HTTP client (MCP Python SDK 2.x):
+
+```python
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async with streamable_http_client("http://127.0.0.1:8000/mcp") as (read, write):
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        print(await session.list_tools())
+```
 
 For local STDIO clients, run the STDIO transport instead:
 

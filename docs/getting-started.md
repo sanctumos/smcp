@@ -55,6 +55,7 @@ Once running, SMCP provides these endpoints:
 - **Main Server**: `http://localhost:8000`
 - **SSE Endpoint**: `http://localhost:8000/sse`
 - **Message Endpoint**: `http://localhost:8000/messages/`
+- **Streamable HTTP**: `http://localhost:8000/mcp` (MCP 2.x Streamable HTTP; same tools as SSE)
 
 ### Health Check
 Verify your server is running:

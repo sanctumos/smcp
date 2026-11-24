@@ -4,9 +4,30 @@ Complete API reference for the Sanctum Letta MCP Server.
 
 ## Overview
 
-The Sanctum Letta MCP Server implements the Model Context Protocol (MCP) specification using Server-Sent Events (SSE) for real-time communication and HTTP POST for request/response handling.
+The Sanctum Letta MCP Server implements the Model Context Protocol (MCP) specification over three
+transports: classic **SSE** (`GET /sse` + `POST /messages/`), **Streamable HTTP** (`/mcp`), and
+**STDIO**. Tool handlers are shared — plugins and the governor behave the same on every transport.
 
 ## Endpoints
+
+### Streamable HTTP Endpoint
+
+**URL**: `/mcp` (all methods handled by the MCP Streamable HTTP ASGI app)  
+**Description**: MCP 2.x Streamable HTTP transport. Stateful sessions with a 30-minute idle timeout
+(`session_idle_timeout=1800`). Same tool catalog and API-key auth rules as SSE. Event-store
+resumability is **not** enabled in v1.
+
+**Client example** (MCP Python SDK):
+
+```python
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+async with streamable_http_client("http://localhost:8000/mcp") as (read, write):
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        await session.list_tools()
+```
 
 ### SSE Endpoint
 
@@ -462,7 +483,7 @@ For long-running operations:
 
 ## Authentication
 
-The HTTP/SSE transport supports optional shared-secret authentication. Configure one or more keys and
+The HTTP transports (SSE **and** Streamable HTTP `/mcp`) support optional shared-secret authentication. Configure one or more keys and
 clients must present a valid key as `Authorization: Bearer <key>` or `X-API-Key: <key>`.
 
 ```bash

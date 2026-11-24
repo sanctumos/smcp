@@ -39,7 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dev-branch coverage raised to **99%+** (`fail_under` ratcheted to **90**) across unit, integration, and e2e — including governor profiles, ServerContext isolation, describe-contract validation, auth middleware, and plugin execution edge paths.
 
-## Unreleased
+## [3.2.0] - 2026-11-24
+
+### Added
+
+- **Streamable HTTP transport at `/mcp`** (additive third transport). Same MCP `Server` and tool handlers as classic SSE and STDIO. Uses MCP SDK 2.x `StreamableHTTPSessionManager` + `StreamableHTTPASGIApp` with Starlette lifespan so the session manager stays alive for the process. Stateful sessions with a 30-minute idle timeout. Classic SSE (`GET /sse` + `POST /messages/`) and STDIO are unchanged. Plugin architecture / `--describe` contract untouched. API-key auth applies uniformly to all HTTP paths via the existing raw ASGI middleware.
 
 ### Changed
 
@@ -47,13 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Extract MCP tool handler binding** behind `bind_mcp_tool_handlers()` so list/call logic is plain async functions.
 - **Call path always returns `CallToolResult`** (success, governor, gate, and error) via `_tool_text_result` / `_tool_error_result` — no bare content lists.
 
-### Added
-
-- *(nothing yet)*
-
 ### Fixed
 
 - **Python 3.10 STDIO entry no longer NameErrors on `ExceptionGroup`** (CI). Import the `exceptiongroup` backport on 3.10 so Windows flush-group handling and KeyboardInterrupt stay well-defined (`except ExceptionGroup` is not a builtin name before 3.11).
+
+### Documentation
+
+- README, getting-started, API reference, and Letta connection guide document `/mcp` alongside SSE; SSE sections kept intact.
 
 ## [3.0.3] - 2026-07-08
 

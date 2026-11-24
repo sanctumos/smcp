@@ -147,6 +147,12 @@ class StreamableHTTPServerConfig(BaseServerConfig):
     custom_headers: Optional[dict[str, str]] = Field(None, description="Custom HTTP headers to include with streamable HTTP requests")
 ```
 
+**SMCP server support:** SMCP serves Streamable HTTP at **`/mcp`** on the same process as classic
+SSE (on by default; no extra flag). Point Letta's `streamable_http` client at
+`http(s)://<host>:<port>/mcp`. Prefer classic **SSE** when you already have a working Letta SSE
+config — it remains the default documented path and is fully supported. Prefer **Streamable HTTP**
+when the client stack speaks MCP 2.x streamable HTTP natively and you want a single `/mcp` URL.
+
 ## SSE Endpoint Specifications
 
 ### Core Requirements
