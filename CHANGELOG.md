@@ -39,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Dev-branch coverage raised to **99%+** (`fail_under` ratcheted to **90**) across unit, integration, and e2e — including governor profiles, ServerContext isolation, describe-contract validation, auth middleware, and plugin execution edge paths.
 
+## [3.2.1] - 2026-11-24
+
+### Fixed
+
+- **JSON tool schemas publish underscore parameter names** (hyphen/underscore). Plugin `--describe` often uses CLI-style `menu-item-id`; Letta validates that schema before `_coalesce_tool_argument_aliases` runs, so models sending `menu_item_id` failed as a required-property miss and looped.
+- **Letta `request_heartbeat` accepted and stripped** — declared on every tool schema and removed before argv build so Letta’s injected field does not become a bogus CLI flag.
+- **Opaque `object` parameters allow additional properties** — empty object schemas no longer force `additionalProperties: false`, which Letta used to strip nested JSON (e.g. Rico catering `payload_json`) to `{}`.
+
 ## [3.2.0] - 2026-11-24
 
 ### Added

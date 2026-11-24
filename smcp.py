@@ -27,7 +27,7 @@ from __future__ import annotations
 # importable module `smcp`; there is no separate package __init__.py to drift
 # out of sync. `pyproject.toml` carries the same version as the build-time
 # source of truth.
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 __author__ = "Mark Rizzn Hopkins"
 __license__ = "AGPLv3"
 __url__ = "https://sanctumos.org"
@@ -539,6 +539,9 @@ def _coalesce_tool_argument_aliases(arguments: dict) -> dict:
         return arguments
     out: dict = {}
     for key, value in arguments.items():
+        # Letta injects this on every tool call; strip before argv build.
+        if key in ("request_heartbeat", "request-heartbeat"):
+            continue
         canon = key.replace("-", "_")
         if canon in out:
             # A variant is already present; only let a non-null value fill a null.
@@ -989,12 +992,21 @@ def parameter_spec_to_json_schema(parameters: List[Dict[str, Any]]) -> Dict[str,
     
     Returns:
         JSON Schema object with properties and required fields
+
+    Plugin ``--describe`` names are often hyphenated (matching CLI ``--flags``).
+    Letta validates tool arguments against this schema *before* SMCP's
+    hyphen/underscore coalescer runs, and models (especially GLM) emit
+    ``menu_item_id`` while the schema required ``menu-item-id`` — a tight
+    retry loop. Publish underscore names so the schema matches argparse
+    dests and what models actually send. Execution still coalesces either
+    spelling via ``_coalesce_tool_argument_aliases``.
     """
     properties = {}
     required = []
     
     for param in parameters:
-        param_name = param.get("name", "")
+        raw_name = param.get("name", "") or ""
+        param_name = raw_name.replace("-", "_")
         param_type = param.get("type", "string")
         param_desc = param.get("description", "")
         param_required = param.get("required", False)
@@ -1024,11 +1036,27 @@ def parameter_spec_to_json_schema(parameters: List[Dict[str, Any]]) -> Dict[str,
         # Handle arrays - assume array of strings if not specified
         if json_type == "array":
             prop_schema["items"] = {"type": "string"}
+
+        # Opaque objects (no nested properties declared): allow arbitrary keys.
+        # Letta otherwise materializes empty object + additionalProperties:false and
+        # strips nested fields to {} (broke Rico catering payload_json).
+        if json_type == "object" and "properties" not in prop_schema:
+            prop_schema["additionalProperties"] = True
         
         properties[param_name] = prop_schema
         
         if param_required:
             required.append(param_name)
+
+    # Letta agents inject request_heartbeat on every tool call; accept it in schema
+    # and strip before argv build (see _coalesce_tool_argument_aliases).
+    properties["request_heartbeat"] = {
+        "type": "boolean",
+        "description": (
+            "Request an immediate heartbeat after function execution (Letta)."
+        ),
+        "default": False,
+    }
     
     schema = {
         "type": "object",
@@ -1067,14 +1095,9 @@ def create_tool_from_plugin(plugin_name: str, command: str, command_spec: Dict[s
         # Build schema from parameters
         input_schema = parameter_spec_to_json_schema(parameters)
     else:
-        # Fallback: simple description and empty schema
+        # Fallback: simple description + empty command params (still Letta-safe)
         description = f"Execute {plugin_name} {command} command"
-        input_schema = {
-            "type": "object",
-            "properties": {},
-            "required": [],
-            "additionalProperties": False
-        }
+        input_schema = parameter_spec_to_json_schema([])
     
     return Tool(
         name=tool_name,

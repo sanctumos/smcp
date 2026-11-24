@@ -277,6 +277,11 @@ class TestCoalesceAliases:
             {"foo_bar": None, "foo-bar": "v"}
         ) == {"foo_bar": "v"}
 
+    def test_strips_letta_request_heartbeat(self):
+        assert smcp_module._coalesce_tool_argument_aliases(
+            {"menu_item_id": 1, "request_heartbeat": True, "request-heartbeat": False}
+        ) == {"menu_item_id": 1}
+
     def test_core_has_no_product_specific_literals(self):
         # Guard: the coalescer must not name any product field (issue #44).
         import inspect

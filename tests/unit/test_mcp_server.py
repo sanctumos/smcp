@@ -455,12 +455,41 @@ class TestParameterSpecToJsonSchema:
         assert schema["properties"]["items"]["items"]["type"] == "string"
     
     def test_parameter_spec_to_json_schema_empty(self):
-        """Test schema conversion with no parameters."""
+        """Test schema conversion with no parameters (still declares Letta heartbeat)."""
         schema = parameter_spec_to_json_schema([])
         
         assert schema["type"] == "object"
-        assert schema["properties"] == {}
         assert schema["required"] == []
+        assert "request_heartbeat" in schema["properties"]
+        assert schema["properties"]["request_heartbeat"]["type"] == "boolean"
+
+    def test_parameter_spec_to_json_schema_hyphenated_names_become_underscores(self):
+        """CLI-style hyphen names must publish as underscore JSON keys (Letta/GLM)."""
+        parameters = [
+            {"name": "menu-item-id", "type": "number", "required": True, "description": "ID"},
+            {"name": "inventory-quantity", "type": "number", "required": True},
+            {"name": "all-locations", "type": "boolean", "required": False},
+            {"name": "location", "type": "string", "required": False},
+        ]
+
+        schema = parameter_spec_to_json_schema(parameters)
+
+        assert "menu_item_id" in schema["properties"]
+        assert "inventory_quantity" in schema["properties"]
+        assert "all_locations" in schema["properties"]
+        assert "menu-item-id" not in schema["properties"]
+        assert "inventory-quantity" not in schema["properties"]
+        assert schema["required"] == ["menu_item_id", "inventory_quantity"]
+        assert schema["properties"]["menu_item_id"]["type"] == "number"
+        assert schema["properties"]["menu_item_id"]["description"] == "ID"
+        assert "request_heartbeat" in schema["properties"]
+
+    def test_parameter_spec_to_json_schema_opaque_object_allows_additional(self):
+        """Bare object params must allow arbitrary nested keys (Letta payload_json)."""
+        schema = parameter_spec_to_json_schema(
+            [{"name": "payload_json", "type": "object", "required": True}]
+        )
+        assert schema["properties"]["payload_json"]["additionalProperties"] is True
     
     def test_parameter_spec_to_json_schema_unknown_type(self):
         """Test schema conversion with unknown type falls back to string."""
@@ -484,7 +513,8 @@ class TestToolCreation:
         assert tool.name == "demo_math__calculate"
         assert "calculate" in tool.description
         assert tool.input_schema["type"] == "object"
-        assert tool.input_schema["properties"] == {}
+        # Empty command schema still advertises Letta's request_heartbeat
+        assert set(tool.input_schema["properties"]) == {"request_heartbeat"}
 
     def test_create_tool_from_plugin_coin_flip(self):
         """Test creating coin_flip tool without spec."""
@@ -537,7 +567,7 @@ class TestToolCreation:
         tool = create_tool_from_plugin("test_plugin", "test-command", command_spec)
         
         assert "test-command" in tool.description
-        assert tool.input_schema["properties"] == {}
+        assert set(tool.input_schema["properties"]) == {"request_heartbeat"}
 
     def test_create_tool_from_plugin_word_count(self):
         """Test creating word_count tool without spec."""
