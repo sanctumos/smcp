@@ -8,6 +8,7 @@ Licensed under AGPLv3 (see LICENSE).
 """
 
 import sys
+import asyncio
 import importlib.util
 import contextlib
 from pathlib import Path
@@ -100,6 +101,133 @@ class TestWrappedAppOverHttp:
         async with _client(self._app()) as c:
             r = await c.post("/messages/", content=b"{}", headers={"X-API-Key": "topsecret"})
         assert r.status_code == 202
+
+
+@pytest.mark.integration
+class TestStreamableHttpAuth:
+    """API-key rules on /mcp match /sse — same AuthMiddleware, path-agnostic."""
+
+    def _streamable_app(self, cfg: AuthConfig):
+        ctx = smcp_module.ServerContext.create()
+        smcp_module.create_server(ctx)
+        session_manager = smcp_module.create_streamable_http_session_manager(ctx.server)
+        streamable_asgi = smcp_module.StreamableHTTPASGIApp(session_manager)
+        return smcp_module.build_app(
+            _FakeSseTransport(),
+            cfg,
+            ctx=ctx,
+            streamable_http_app=streamable_asgi,
+            session_manager=session_manager,
+        ), session_manager
+
+    async def test_mcp_missing_key_401(self):
+        cfg = AuthConfig(frozenset({"topsecret"}), False, False)
+        app, _mgr = self._streamable_app(cfg)
+        async with _client(app) as c:
+            r = await c.post(smcp_module.STREAMABLE_HTTP_PATH, content=b"{}")
+        assert r.status_code == 401
+        assert r.json()["error"] == "unauthorized"
+
+    async def test_mcp_valid_key_reaches_transport(self):
+        cfg = AuthConfig(frozenset({"topsecret"}), False, False)
+        app, mgr = self._streamable_app(cfg)
+        headers = {
+            "Authorization": "Bearer topsecret",
+            "accept": "application/json, text/event-stream",
+            "content-type": "application/json",
+        }
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "auth-test", "version": "0"},
+            },
+        }
+        async with mgr.run():
+            async with _client(app) as c:
+                r = await c.post(smcp_module.STREAMABLE_HTTP_PATH, json=body, headers=headers)
+        # Past auth → transport handles it (not 401)
+        assert r.status_code != 401
+
+    async def test_mcp_loopback_allowed_without_key(self):
+        # allow_loopback True; httpx ASGI client presents 127.0.0.1
+        cfg = AuthConfig(frozenset({"topsecret"}), True, False)
+        app, mgr = self._streamable_app(cfg)
+        async with mgr.run():
+            async with _client(app) as c:
+                r = await c.post(smcp_module.STREAMABLE_HTTP_PATH, content=b"{}")
+        assert r.status_code != 401
+
+    async def test_mcp_auth_disabled_open(self, clean_auth_env):
+        clean_auth_env.setenv("MCP_AUTH_DISABLED", "1")
+        cfg = smcp_module.resolve_auth_config()
+        assert cfg.disabled is True
+        assert cfg.enforce is False
+        from starlette.applications import Starlette
+        app, _mgr = self._streamable_app(cfg)
+        # Non-enforcing → no AuthMiddleware wrapper (same as SSE)
+        assert isinstance(app, Starlette)
+
+    async def test_auth_does_not_buffer_streamable(self):
+        """Authorized requests are handed to the inner ASGI app without buffering.
+
+        AuthMiddleware must forward send() directly so SSE / Streamable HTTP
+        streams can emit response.start before the body completes.
+        """
+        body_sent = asyncio.Event()
+
+        async def streaming_inner(scope, receive, send):
+            await send({
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-type", b"text/event-stream")],
+            })
+            # Body arrives later — middleware must already have forwarded start.
+            await asyncio.sleep(0.05)
+            await send({
+                "type": "http.response.body",
+                "body": b"data: hi\n\n",
+                "more_body": False,
+            })
+            body_sent.set()
+
+        cfg = AuthConfig(frozenset({"k"}), False, False)
+        app = AuthMiddleware(streaming_inner, cfg)
+
+        messages = []
+
+        async def send(msg):
+            messages.append(msg)
+            if msg["type"] == "http.response.start":
+                assert not body_sent.is_set(), (
+                    "AuthMiddleware buffered the stream — response.start "
+                    "arrived only after the body was ready"
+                )
+
+        scope = {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "path": "/mcp",
+            "raw_path": b"/mcp",
+            "query_string": b"",
+            "headers": [(b"authorization", b"Bearer k")],
+            "client": ("203.0.113.10", 5555),
+            "server": ("test", 80),
+            "scheme": "http",
+        }
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        await app(scope, receive, send)
+        assert any(m["type"] == "http.response.start" for m in messages)
+        assert body_sent.is_set()
+        assert messages[0]["type"] == "http.response.start"
+        assert messages[0]["status"] == 200
 
 
 @pytest.mark.integration
